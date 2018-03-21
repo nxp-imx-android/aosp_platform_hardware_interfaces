@@ -316,6 +316,10 @@ Return<Error> ComposerClient::destroyLayer(Display display, Layer layer)
         std::lock_guard<std::mutex> lock(mDisplayDataMutex);
 
         auto dpy = mDisplayData.find(display);
+        if (dpy == mDisplayData.end()) {
+            return Error::BAD_DISPLAY;
+        }
+
         dpy->second.Layers.erase(layer);
     }
 
