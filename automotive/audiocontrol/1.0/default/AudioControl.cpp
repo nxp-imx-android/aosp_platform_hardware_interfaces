@@ -19,13 +19,13 @@ namespace implementation {
 static int sContextToBusMap[] = {
     -1,     // INVALID
      0,     // MUSIC_CONTEXT
-     1,     // NAVIGATION_CONTEXT
-     2,     // VOICE_COMMAND_CONTEXT
-     3,     // CALL_RING_CONTEXT
-     4,     // CALL_CONTEXT
-     5,     // ALARM_CONTEXT
-     6,     // NOTIFICATION_CONTEXT
-     7,     // SYSTEM_SOUND_CONTEXT
+     0,     // NAVIGATION_CONTEXT
+     0,     // VOICE_COMMAND_CONTEXT
+     0,     // CALL_RING_CONTEXT
+     0,     // CALL_CONTEXT
+     0,     // ALARM_CONTEXT
+     0,     // NOTIFICATION_CONTEXT
+     0,     // SYSTEM_SOUND_CONTEXT
 };
 static const unsigned sContextMapSize = ARRAY_SIZE(sContextToBusMap);
 static const unsigned sContextCount = sContextMapSize - 1;  // Less one for the INVALID entry
