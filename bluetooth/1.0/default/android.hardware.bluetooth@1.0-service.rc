@@ -2,6 +2,7 @@ service bluetooth-1-0 /vendor/bin/hw/android.hardware.bluetooth@1.0-service
     class hal
     user bluetooth
     group bluetooth
+    capabilities NET_ADMIN
     writepid /dev/stune/foreground/tasks
 
 on property:vts.native_server.on=1 && property:ro.build.type=userdebug
