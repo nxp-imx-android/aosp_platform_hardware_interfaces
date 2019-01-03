@@ -20,6 +20,7 @@
 #include <cutils/properties.h>
 #include <utils/Log.h>
 
+#include <string>
 #include <dlfcn.h>
 #include <fcntl.h>
 
@@ -189,8 +190,17 @@ bool VendorInterface::Open(InitializeCompleteCallback initialize_complete_cb,
   initialize_complete_cb_ = initialize_complete_cb;
 
   // Initialize vendor interface
+  char UNITE_VENDOR_LIBRARY_NAME[PROPERTY_VALUE_MAX] = {'\0'};
+  char UNITE_VENDOR_NAME[PROPERTY_VALUE_MAX] = {'\0'};
+  property_get("ro.boot.wifivendor", UNITE_VENDOR_NAME, "NULL");
+  if (strcmp(UNITE_VENDOR_NAME, "NULL") != 0) {
+    sprintf(UNITE_VENDOR_LIBRARY_NAME ,"libbt-vendor-unite-%s",UNITE_VENDOR_NAME);
+    lib_handle_ = dlopen(UNITE_VENDOR_LIBRARY_NAME, RTLD_NOW);
+  } else {
 
-  lib_handle_ = dlopen(VENDOR_LIBRARY_NAME, RTLD_NOW);
+    lib_handle_ = dlopen(VENDOR_LIBRARY_NAME, RTLD_NOW);
+  }
+
   if (!lib_handle_) {
     ALOGE("%s unable to open %s (%s)", __func__, VENDOR_LIBRARY_NAME,
           dlerror());
