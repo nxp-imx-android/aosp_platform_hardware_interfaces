@@ -15,6 +15,8 @@
  */
 
 #include "wifi_feature_flags.h"
+#include <cutils/properties.h>
+#include <string>
 
 namespace {
 #ifdef WIFI_HIDL_FEATURE_AWARE
@@ -45,7 +47,15 @@ namespace feature_flags {
 WifiFeatureFlags::WifiFeatureFlags() {}
 bool WifiFeatureFlags::isAwareSupported() { return wifiHidlFeatureAware; }
 bool WifiFeatureFlags::isDualInterfaceSupported() {
-    return wifiHidlFeatureDualInterface;
+    int is_qca = 0;
+    char vendor_status[PROPERTY_VALUE_MAX];
+    property_get("ro.boot.wifivendor", vendor_status, NULL);
+    is_qca = strcmp(vendor_status, "qca");
+    if (!is_qca) {
+        return true;
+    } else {
+        return wifiHidlFeatureDualInterface;
+    }
 }
 bool WifiFeatureFlags::isApDisabled() {
   return wifiHidlFeatureDisableAp;
