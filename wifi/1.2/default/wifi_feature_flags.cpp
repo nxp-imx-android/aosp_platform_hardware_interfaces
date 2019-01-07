@@ -47,12 +47,12 @@ namespace feature_flags {
 WifiFeatureFlags::WifiFeatureFlags() {}
 bool WifiFeatureFlags::isAwareSupported() { return wifiHidlFeatureAware; }
 bool WifiFeatureFlags::isDualInterfaceSupported() {
-    int is_qca = 0;
+    int is_bcm = 0;
     char vendor_status[PROPERTY_VALUE_MAX];
-    property_get("ro.boot.wifivendor", vendor_status, NULL);
-    is_qca = strcmp(vendor_status, "qca");
-    if (!is_qca) {
-        return true;
+    property_get("ro.boot.wifivendor", vendor_status, "NULL");
+    is_bcm = strcmp(vendor_status, "bcm");
+    if (!is_bcm) {
+        return false;
     } else {
         return wifiHidlFeatureDualInterface;
     }
