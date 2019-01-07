@@ -194,7 +194,7 @@ bool VendorInterface::Open(InitializeCompleteCallback initialize_complete_cb,
   char UNITE_VENDOR_NAME[PROPERTY_VALUE_MAX] = {'\0'};
   property_get("ro.boot.wifivendor", UNITE_VENDOR_NAME, "NULL");
   if (strcmp(UNITE_VENDOR_NAME, "NULL") != 0) {
-    sprintf(UNITE_VENDOR_LIBRARY_NAME ,"libbt-vendor-unite-%s",UNITE_VENDOR_NAME);
+    sprintf(UNITE_VENDOR_LIBRARY_NAME ,"libbt-vendor-unite-%s.so",UNITE_VENDOR_NAME);
     lib_handle_ = dlopen(UNITE_VENDOR_LIBRARY_NAME, RTLD_NOW);
   } else {
 
