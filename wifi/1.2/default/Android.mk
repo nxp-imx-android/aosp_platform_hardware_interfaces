@@ -126,7 +126,7 @@ include $(BUILD_NATIVE_TEST)
 ###
 ### android.hardware.wifi static library for BCM in UNITE mode
 ###
-ifeq ($(BOARD_WLAN_DEVICE), UNITE)
+ifeq ($(BOARD_WLAN_DEVICE_UNITE), UNITE)
 include $(CLEAR_VARS)
 LOCAL_MODULE := android.hardware.wifi@1.0-service-lib.bcm
 LOCAL_MODULE_RELATIVE_PATH := hw
