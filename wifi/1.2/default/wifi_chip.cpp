@@ -1,6 +1,6 @@
 /*
  * Copyright (C) 2016 The Android Open Source Project
- *
+ * Copyright 2019 NXP
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
  * You may obtain a copy of the License at
@@ -745,6 +745,15 @@ std::pair<WifiStatus, sp<IWifiApIface>> WifiChip::createApIfaceInternal() {
         return {createWifiStatus(WifiStatusCode::ERROR_NOT_AVAILABLE), {}};
     }
     std::string ifname = allocateApOrStaIfaceName();
+
+    wifi_system::InterfaceTool iface_tool_;
+    bool up = iface_tool_.GetUpState( ifname.c_str());
+    if(up) {
+        iface_tool_.SetUpState( ifname.c_str(), false);
+        usleep(500000);
+        LOG(INFO) << "Let " << ifname.c_str()<< " interface completely down";
+    }
+
     sp<WifiApIface> iface = new WifiApIface(ifname, legacy_hal_);
     ap_ifaces_.push_back(iface);
     for (const auto& callback : event_cb_handler_.getCallbacks()) {
