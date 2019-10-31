@@ -26,7 +26,13 @@ include $(CLEAR_VARS)
 LOCAL_MODULE_RELATIVE_PATH := hw
 LOCAL_PROPRIETARY_MODULE := true
 LOCAL_MODULE := android.hardware.keymaster@3.0-service
+
+ifeq ($(findstring imx, $(TARGET_BOARD_PLATFORM)), imx)
+LOCAL_INIT_RC := android.hardware.keymaster@3.0-service-imx.rc
+else
 LOCAL_INIT_RC := android.hardware.keymaster@3.0-service.rc
+endif
+
 LOCAL_SRC_FILES := \
     service.cpp
 
