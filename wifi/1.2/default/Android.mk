@@ -16,6 +16,7 @@ LOCAL_PATH := $(call my-dir)
 ###
 ### android.hardware.wifi static library
 ###
+ifndef ($(BOARD_WLAN_DEVICE_UNITE))
 include $(CLEAR_VARS)
 LOCAL_MODULE := android.hardware.wifi@1.0-service-lib
 LOCAL_MODULE_RELATIVE_PATH := hw
@@ -122,6 +123,7 @@ LOCAL_SHARED_LIBRARIES := \
     android.hardware.wifi@1.1 \
     android.hardware.wifi@1.2
 include $(BUILD_NATIVE_TEST)
+endif
 
 ###
 ### android.hardware.wifi static library for BCM in UNITE mode
