@@ -22,7 +22,9 @@
 #include <errno.h>
 #include <fcntl.h>
 #include <unistd.h>
+#include <string>
 #include <utils/Log.h>
+#include <cutils/properties.h>
 
 namespace {
 
@@ -95,6 +97,18 @@ void HciPacketizer::OnDataReady(int fd, HciPacketType packet_type) {
       bytes_remaining_ -= bytes_read;
       bytes_read_ += bytes_read;
       if (bytes_remaining_ == 0) {
+        char UNITE_VENDOR_NAME[PROPERTY_VALUE_MAX] = {'\0'};
+        property_get("ro.boot.wifivendor", UNITE_VENDOR_NAME, "NULL");
+        if (strcmp(UNITE_VENDOR_NAME, "qca") == 0) {
+          if (HCI_PACKET_TYPE_EVENT == packet_type) {
+            uint16_t opcode = *((uint16_t *)(packet_.data() + 3));
+            if ((opcode == 0xFD53) && (packet_.size() == 14)) {
+              uint8_t * status = (uint8_t*)(packet_.data() + 5);
+              *status = 0x1;
+              ALOGD("%s: HCI_PAYLOAD modification for QCA HCI_BLE_VENDOR_CAP_OCF", __func__);
+            }
+          }
+        }
         packet_ready_cb_();
         state_ = HCI_PREAMBLE;
         bytes_read_ = 0;
