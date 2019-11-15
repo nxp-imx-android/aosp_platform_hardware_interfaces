@@ -52,8 +52,8 @@ cc_library_static {
     ],
 }
 
-cc_library_static {
-    name: "android.hardware.bluetooth-hci",
+bluetooth_defaults {
+    name: "bluetooth_default",
     vendor: true,
     defaults: ["hidl_defaults"],
     srcs: [
@@ -69,6 +69,28 @@ cc_library_static {
         "liblog",
         "libutils",
     ],
+}
+
+cc_library_static {
+    name: "android.hardware.bluetooth-hci",
+    defaults: ["bluetooth_default"],
+}
+
+bootstrap_go_package {
+    name: "soong-bluetooth",
+    pkgPath: "android/soong/hardware/interfaces/bluetooth/1.0/default",
+    deps: [
+        "blueprint",
+        "blueprint-pathtools",
+        "soong",
+        "soong-android",
+        "soong-cc",
+        "soong-genrule",
+    ],
+    srcs: [
+        "bluetooth.go",
+    ],
+    pluginFor: ["soong_build"],
 }
 
 cc_test {
