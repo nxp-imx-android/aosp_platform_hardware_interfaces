@@ -22,8 +22,8 @@ func bluetoothDefaults(ctx android.LoadHookContext) {
     }
 
     p := &props{}
-    if ctx.Config().VendorConfig("IMXPLUGIN").Bool("BOARD_HAVE_BLUETOOTH_QCOM") {
-        cppflags = append(cppflags, "-DBOARD_HAVE_BLUETOOTH_QCOM")
+    if ctx.Config().VendorConfig("IMXPLUGIN").Bool("BOARD_BLUETOOTH_NO_DLE") {
+        cppflags = append(cppflags, "-DBOARD_BLUETOOTH_NO_DLE")
     }
     p.Cflags = cppflags
     ctx.AppendProperties(p)
