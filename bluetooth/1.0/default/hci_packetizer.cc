@@ -95,7 +95,7 @@ void HciPacketizer::OnDataReady(int fd, HciPacketType packet_type) {
       bytes_remaining_ -= bytes_read;
       bytes_read_ += bytes_read;
       if (bytes_remaining_ == 0) {
-#ifdef BOARD_HAVE_BLUETOOTH_QCOM
+#ifdef BOARD_BLUETOOTH_NO_DLE
           if (HCI_PACKET_TYPE_EVENT == packet_type) {
             uint16_t opcode = *((uint16_t *)(packet_.data() + 3));
             if ((opcode == 0xFD53) && (packet_.size() == 14)) {
