@@ -95,16 +95,6 @@ void HciPacketizer::OnDataReady(int fd, HciPacketType packet_type) {
       bytes_remaining_ -= bytes_read;
       bytes_read_ += bytes_read;
       if (bytes_remaining_ == 0) {
-#ifdef BOARD_BLUETOOTH_NO_DLE
-          if (HCI_PACKET_TYPE_EVENT == packet_type) {
-            uint16_t opcode = *((uint16_t *)(packet_.data() + 3));
-            if ((opcode == 0xFD53) && (packet_.size() == 14)) {
-              uint8_t * status = (uint8_t*)(packet_.data() + 5);
-              *status = 0x1;
-              ALOGD("%s: HCI_PAYLOAD modification for QCA HCI_BLE_VENDOR_CAP_OCF", __func__);
-            }
-          }
-#endif
         packet_ready_cb_();
         state_ = HCI_PREAMBLE;
         bytes_read_ = 0;
