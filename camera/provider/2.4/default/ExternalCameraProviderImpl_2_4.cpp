@@ -386,8 +386,7 @@ bool ExternalCameraProviderImpl_2_4::HotplugThread::threadLoop() {
                                     mParent->deviceAdded(v4l2DevicePath);
                             }
                             if (event->mask & IN_DELETE) {
-                                if(mParent->isExternalDevice(v4l2DevicePath))
-                                    mParent->deviceRemoved(v4l2DevicePath);
+                                mParent->deviceRemoved(v4l2DevicePath);
                             }
                         }
                     }
