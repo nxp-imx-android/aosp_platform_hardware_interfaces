@@ -284,21 +284,19 @@ void ExternalCameraProviderImpl_2_4::deviceRemoved(const char* devName) {
 }
 
 bool ExternalCameraProviderImpl_2_4::isExternalDevice(const char* devName) {
-    int32_t fd = -1;
     int32_t ret = -1;
     struct v4l2_capability vidCap;
 
-    if ((fd = open(devName, O_RDWR | O_NONBLOCK)) < 0) {
+    base::unique_fd fd(::open(devName, O_RDWR | O_NONBLOCK));
+    if (fd.get() < 0) {
         ALOGE("%s open dev path:%s failed:%s", __func__, devName,strerror(errno));
         return false;
     }
 
-    ret = ioctl(fd, VIDIOC_QUERYCAP, &vidCap);
+    ret = ioctl(fd.get(), VIDIOC_QUERYCAP, &vidCap);
     if (ret < 0) {
-            ALOGE("%s QUERYCAP dev path:%s failed", __func__, devName);
-            close(fd);
-            fd = -1;
-            return false;
+        ALOGE("%s QUERYCAP dev path:%s failed", __func__, devName);
+        return false;
     }
 
     if(strstr((const char*)vidCap.driver, "uvc")) {
@@ -306,8 +304,7 @@ bool ExternalCameraProviderImpl_2_4::isExternalDevice(const char* devName) {
         vid_fmtdesc.index = 0;
         vid_fmtdesc.type  = V4L2_BUF_TYPE_VIDEO_CAPTURE;
 
-        ret = ioctl(fd, VIDIOC_ENUM_FMT, &vid_fmtdesc);
-        close(fd);
+        ret = ioctl(fd.get(), VIDIOC_ENUM_FMT, &vid_fmtdesc);
         if(ret == 0) {
             return true;
         }
