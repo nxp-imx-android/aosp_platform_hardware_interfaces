@@ -379,6 +379,8 @@ bool ExternalCameraProviderImpl_2_4::HotplugThread::threadLoop() {
                             snprintf(v4l2DevicePath, kMaxDevicePathLen,
                                     "%s%s", kDevicePath, event->name);
                             if (event->mask & IN_CREATE) {
+                                // usb camera is not ready until 100ms.
+                                usleep(100000);
                                 if(mParent->isExternalDevice(v4l2DevicePath))
                                     mParent->deviceAdded(v4l2DevicePath);
                             }
