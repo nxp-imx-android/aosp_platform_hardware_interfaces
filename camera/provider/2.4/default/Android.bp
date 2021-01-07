@@ -68,6 +68,7 @@ cc_library_shared {
         "libhidlbase",
         "liblog",
         "libtinyxml2",
+        "libbase",
         "libutils",
     ],
     static_libs: [
