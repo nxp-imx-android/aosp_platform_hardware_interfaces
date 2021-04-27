@@ -57,7 +57,7 @@ cc_library_shared {
         "android.hidl.allocator@1.0",
         "android.hidl.memory@1.0",
         "camera.device@3.3-impl",
-        "camera.device@3.4-external-impl",
+        "camera.device@3.4-external-imx-impl",
         "camera.device@3.4-impl",
         "camera.device@3.5-external-impl",
         "camera.device@3.5-impl",
@@ -75,7 +75,7 @@ cc_library_shared {
         "android.hardware.camera.common@1.0-helper",
     ],
     header_libs: [
-        "camera.device@3.4-external-impl_headers",
+        "camera.device@3.4-external-imx-impl_headers",
         "camera.device@3.5-external-impl_headers",
         "camera.device@3.6-external-impl_headers"
     ],
@@ -106,7 +106,7 @@ cc_library_shared {
         "camera.device@1.0-impl",
         "camera.device@3.2-impl",
         "camera.device@3.3-impl",
-        "camera.device@3.4-external-impl",
+        "camera.device@3.4-external-imx-impl",
         "camera.device@3.4-impl",
         "camera.device@3.5-external-impl",
         "camera.device@3.5-impl",
@@ -119,7 +119,7 @@ cc_library_shared {
         "libutils",
     ],
     header_libs: [
-        "camera.device@3.4-external-impl_headers",
+        "camera.device@3.4-external-imx-impl_headers",
         "camera.device@3.4-impl_headers",
         "camera.device@3.5-external-impl_headers",
         "camera.device@3.5-impl_headers",
@@ -160,7 +160,7 @@ cc_defaults {
         "android.hardware.camera.common@1.0-helper",
     ],
     header_libs: [
-        "camera.device@3.4-external-impl_headers",
+        "camera.device@3.4-external-imx-impl_headers",
         "camera.device@3.4-impl_headers",
         "camera.device@3.5-external-impl_headers",
         "camera.device@3.5-impl_headers",
@@ -222,7 +222,7 @@ cc_binary {
         "libutils",
     ],
     header_libs: [
-        "camera.device@3.4-external-impl_headers",
+        "camera.device@3.4-external-imx-impl_headers",
         "camera.device@3.4-impl_headers",
         "camera.device@3.5-external-impl_headers",
         "camera.device@3.5-impl_headers",
