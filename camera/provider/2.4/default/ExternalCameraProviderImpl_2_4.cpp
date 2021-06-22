@@ -399,7 +399,7 @@ bool ExternalCameraProviderImpl_2_4::HotplugThread::threadLoop() {
                             char mCamDevice[kMaxDevicePathLen];
                             snprintf(v4l2DevicePath, kMaxDevicePathLen,
                                     "%s%s", kDevicePath, event->name);
-                            sprintf(mCamDevice, "/sys/class/video4linux/%s/name", de->d_name);
+                            sprintf(mCamDevice, "/sys/class/video4linux/%s/name", event->name);
                             if (event->mask & IN_CREATE) {
                                 // usb camera is not ready until 100ms.
                                 usleep(100000);
