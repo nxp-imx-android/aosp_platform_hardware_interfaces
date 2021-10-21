@@ -1,0 +1,2 @@
+service vendor.keymint-software /vendor/bin/hw/android.hardware.security.keymint-service-imx
+    user nobody
