@@ -46,6 +46,38 @@ cc_binary {
     ],
 }
 
+cc_binary {
+    name: "android.hardware.security.keymint-service-imx",
+    relative_install_path: "hw",
+    init_rc: ["android.hardware.security.keymint-service-imx.rc"],
+    vendor: true,
+    cflags: [
+        "-Wall",
+        "-Wextra",
+    ],
+    shared_libs: [
+        "android.hardware.security.keymint-V1-ndk_platform",
+        "android.hardware.security.sharedsecret-V1-ndk_platform",
+        "android.hardware.security.secureclock-V1-ndk_platform",
+        "libbase",
+        "libbinder_ndk",
+        "libcppbor_external",
+        "libcrypto",
+        "libkeymaster_portable",
+        "libkeymint",
+        "liblog",
+        "libpuresoftkeymasterdevice",
+        "libutils",
+    ],
+    srcs: [
+        "service.cpp",
+    ],
+    required: [
+        "RemoteProvisioner",
+        "android.hardware.hardware_keystore.xml",
+    ],
+}
+
 prebuilt_etc {
     name: "android.hardware.hardware_keystore.xml",
     sub_dir: "permissions",
