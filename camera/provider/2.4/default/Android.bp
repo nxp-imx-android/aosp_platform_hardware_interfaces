@@ -7,6 +7,27 @@ package {
     default_applicable_licenses: ["hardware_interfaces_license"],
 }
 
+imx_external_camera_defaults {
+    name: "imx_external_camera_defaults",
+}
+
+bootstrap_go_package {
+    name: "soong-imx_external_camera",
+    pkgPath: "android/soong/hardware/interfaces/camera/provider/2.4/default",
+    deps: [
+        "blueprint",
+        "blueprint-pathtools",
+        "soong",
+        "soong-android",
+        "soong-cc",
+        "soong-genrule",
+    ],
+    srcs: [
+        "imx_external_camera.go",
+    ],
+    pluginFor: ["soong_build"],
+ }
+
 cc_library_shared {
     name: "android.hardware.camera.provider@2.4-legacy",
     defaults: ["hidl_defaults"],
@@ -49,6 +70,7 @@ cc_library_shared {
 
 cc_library_shared {
     name: "android.hardware.camera.provider@2.4-external",
+    defaults: ["imx_external_camera_defaults"],
     proprietary: true,
     srcs: ["ExternalCameraProviderImpl_2_4.cpp"],
     shared_libs: [
@@ -66,7 +88,6 @@ cc_library_shared {
         "android.hidl.allocator@1.0",
         "android.hidl.memory@1.0",
         "camera.device@3.3-impl",
-        "camera.device@3.4-external-imx-impl",
         "camera.device@3.4-impl",
         "camera.device@3.5-external-impl",
         "camera.device@3.5-impl",
@@ -84,7 +105,6 @@ cc_library_shared {
         "android.hardware.camera.common@1.0-helper",
     ],
     header_libs: [
-        "camera.device@3.4-external-imx-impl_headers",
         "camera.device@3.5-external-impl_headers",
         "camera.device@3.6-external-impl_headers",
     ],
@@ -93,7 +113,7 @@ cc_library_shared {
 
 cc_library_shared {
     name: "android.hardware.camera.provider@2.4-impl",
-    defaults: ["hidl_defaults"],
+    defaults: ["hidl_defaults", "imx_external_camera_defaults"],
     proprietary: true,
     relative_install_path: "hw",
     srcs: ["CameraProvider_2_4.cpp"],
@@ -115,7 +135,6 @@ cc_library_shared {
         "camera.device@1.0-impl",
         "camera.device@3.2-impl",
         "camera.device@3.3-impl",
-        "camera.device@3.4-external-imx-impl",
         "camera.device@3.4-impl",
         "camera.device@3.5-external-impl",
         "camera.device@3.5-impl",
@@ -128,7 +147,6 @@ cc_library_shared {
         "libutils",
     ],
     header_libs: [
-        "camera.device@3.4-external-imx-impl_headers",
         "camera.device@3.4-impl_headers",
         "camera.device@3.5-external-impl_headers",
         "camera.device@3.5-impl_headers",
@@ -141,7 +159,7 @@ cc_library_shared {
 
 cc_defaults {
     name: "camera_service_defaults",
-    defaults: ["hidl_defaults"],
+    defaults: ["hidl_defaults", "imx_external_camera_defaults"],
     proprietary: true,
     relative_install_path: "hw",
     srcs: ["service.cpp"],
@@ -170,7 +188,6 @@ cc_defaults {
         "android.hardware.camera.common@1.0-helper",
     ],
     header_libs: [
-        "camera.device@3.4-external-imx-impl_headers",
         "camera.device@3.4-impl_headers",
         "camera.device@3.5-external-impl_headers",
         "camera.device@3.5-impl_headers",
@@ -211,7 +228,7 @@ cc_binary {
 
 cc_binary {
     name: "android.hardware.camera.provider@2.4-external-service",
-    defaults: ["hidl_defaults"],
+    defaults: ["hidl_defaults","imx_external_camera_defaults"],
     proprietary: true,
     relative_install_path: "hw",
     srcs: ["external-service.cpp"],
@@ -232,7 +249,6 @@ cc_binary {
         "libutils",
     ],
     header_libs: [
-        "camera.device@3.4-external-imx-impl_headers",
         "camera.device@3.4-impl_headers",
         "camera.device@3.5-external-impl_headers",
         "camera.device@3.5-impl_headers",
