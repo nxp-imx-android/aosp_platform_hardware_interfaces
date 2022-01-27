@@ -195,7 +195,7 @@ cc_test {
         "impl/vhal_v2_0/tests/ProtoMessageConverter_test.cpp",
     ],
     static_libs: [
-        "android.hardware.automotive.vehicle@2.0-default-impl-lib",
+        "android.hardware.automotive.vehicle@2.0-imx-impl-lib",
         "android.hardware.automotive.vehicle@2.0-libproto-native",
         "libprotobuf-cpp-lite",
     ],
@@ -219,7 +219,7 @@ cc_binary {
     ],
     static_libs: [
         "android.hardware.automotive.vehicle@2.0-manager-lib",
-        "android.hardware.automotive.vehicle@2.0-default-impl-lib",
+        "android.hardware.automotive.vehicle@2.0-imx-impl-lib",
         "android.hardware.automotive.vehicle@2.0-libproto-native",
     ],
 }
