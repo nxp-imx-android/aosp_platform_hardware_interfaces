@@ -73,6 +73,10 @@ cc_library_shared {
     defaults: ["imx_external_camera_defaults"],
     proprietary: true,
     srcs: ["ExternalCameraProviderImpl_2_4.cpp"],
+    include_dirs: [
+        "vendor/nxp-opensource/imx/display/display",
+        "frameworks/native/headers/media_plugin",
+    ],
     shared_libs: [
         "android.hardware.camera.common@1.0",
         "android.hardware.camera.device@1.0",
@@ -117,6 +121,10 @@ cc_library_shared {
     proprietary: true,
     relative_install_path: "hw",
     srcs: ["CameraProvider_2_4.cpp"],
+    include_dirs: [
+        "vendor/nxp-opensource/imx/display/display",
+        "frameworks/native/headers/media_plugin",
+    ],
     shared_libs: [
         "android.hardware.camera.common@1.0",
         "android.hardware.camera.device@1.0",
