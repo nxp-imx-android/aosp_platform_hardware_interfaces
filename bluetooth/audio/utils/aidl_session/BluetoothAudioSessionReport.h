@@ -33,11 +33,13 @@ class BluetoothAudioSessionReport {
   static void OnSessionStarted(
       const SessionType& session_type,
       const std::shared_ptr<IBluetoothAudioPort> host_iface,
-      const DataMQDesc* data_mq, const AudioConfiguration& audio_config) {
+      const DataMQDesc* data_mq, const AudioConfiguration& audio_config,
+      const std::vector<LatencyMode>& latency_modes) {
     std::shared_ptr<BluetoothAudioSession> session_ptr =
         BluetoothAudioSessionInstance::GetSessionInstance(session_type);
     if (session_ptr != nullptr) {
-      session_ptr->OnSessionStarted(host_iface, data_mq, audio_config);
+      session_ptr->OnSessionStarted(host_iface, data_mq, audio_config,
+                                    latency_modes);
     }
   }
 
@@ -76,6 +78,18 @@ class BluetoothAudioSessionReport {
         BluetoothAudioSessionInstance::GetSessionInstance(session_type);
     if (session_ptr != nullptr) {
       session_ptr->ReportAudioConfigChanged(audio_config);
+    }
+  }
+  /***
+   * The API reports the Bluetooth stack has replied the changed of the low
+   * latency audio allowed, and will inform registered bluetooth_audio outputs
+   ***/
+  static void ReportLowLatencyModeAllowedChanged(
+    const SessionType& session_type, bool allowed) {
+    std::shared_ptr<BluetoothAudioSession> session_ptr =
+        BluetoothAudioSessionInstance::GetSessionInstance(session_type);
+    if (session_ptr != nullptr) {
+      session_ptr->ReportLowLatencyModeAllowedChanged(allowed);
     }
   }
 };

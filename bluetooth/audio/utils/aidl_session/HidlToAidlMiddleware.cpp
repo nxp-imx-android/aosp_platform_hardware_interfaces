@@ -28,7 +28,6 @@
 #include "../aidl_session/BluetoothAudioSessionControl.h"
 #include "HidlToAidlMiddleware_2_0.h"
 #include "HidlToAidlMiddleware_2_1.h"
-#include "HidlToAidlMiddleware_2_2.h"
 
 namespace aidl {
 namespace android {
@@ -82,15 +81,10 @@ using Lc3Config_2_1 =
 using Lc3FrameDuration_2_1 =
     ::android::hardware::bluetooth::audio::V2_1::Lc3FrameDuration;
 
-using LeAudioConfig_2_2 =
-    ::android::hardware::bluetooth::audio::V2_2::LeAudioConfiguration;
-using LeAudioMode_2_2 =
-    ::android::hardware::bluetooth::audio::V2_2::LeAudioMode;
-
 std::mutex legacy_callback_lock;
 std::unordered_map<
     SessionType,
-    std::unordered_map<uint16_t, std::shared_ptr<PortStatusCallbacks_2_2>>>
+    std::unordered_map<uint16_t, std::shared_ptr<PortStatusCallbacks_2_0>>>
     legacy_callback_table;
 
 const static std::unordered_map<SessionType_2_1, SessionType>
@@ -418,102 +412,47 @@ inline Lc3Config_2_1 to_hidl_lc3_config_2_1(
 }
 
 inline Lc3CodecConfig_2_1 to_hidl_leaudio_config_2_1(
-    const LeAudioConfiguration& leaudio_config) {
+    const LeAudioConfiguration& unicast_config) {
   Lc3CodecConfig_2_1 hidl_lc3_codec_config = {
       .audioChannelAllocation = 0,
   };
-  if (leaudio_config.modeConfig.getTag() ==
-      LeAudioConfiguration::LeAudioModeConfig::unicastConfig) {
-    auto& unicast_config =
-        leaudio_config.modeConfig
-            .get<LeAudioConfiguration::LeAudioModeConfig::unicastConfig>();
-    if (unicast_config.leAudioCodecConfig.getTag() ==
-        LeAudioCodecConfiguration::lc3Config) {
-      LOG(FATAL) << __func__ << ": unexpected codec type(vendor?)";
-    }
-    auto& le_codec_config = unicast_config.leAudioCodecConfig
-                                .get<LeAudioCodecConfiguration::lc3Config>();
-
-    hidl_lc3_codec_config.lc3Config = to_hidl_lc3_config_2_1(le_codec_config);
-
-    for (const auto& map : unicast_config.streamMap) {
-      hidl_lc3_codec_config.audioChannelAllocation |=
-          map.audioChannelAllocation;
-    }
-  } else {
-    // NOTE: Broadcast is not officially supported in HIDL
-    auto& bcast_config =
-        leaudio_config.modeConfig
-            .get<LeAudioConfiguration::LeAudioModeConfig::broadcastConfig>();
-    if (bcast_config.streamMap.empty()) {
-      return hidl_lc3_codec_config;
-    }
-    if (bcast_config.streamMap[0].leAudioCodecConfig.getTag() !=
-        LeAudioCodecConfiguration::lc3Config) {
-      LOG(FATAL) << __func__ << ": unexpected codec type(vendor?)";
-    }
-    auto& le_codec_config =
-        bcast_config.streamMap[0]
-            .leAudioCodecConfig.get<LeAudioCodecConfiguration::lc3Config>();
-    hidl_lc3_codec_config.lc3Config = to_hidl_lc3_config_2_1(le_codec_config);
-
-    for (const auto& map : bcast_config.streamMap) {
-      hidl_lc3_codec_config.audioChannelAllocation |=
-          map.audioChannelAllocation;
-    }
+  if (unicast_config.leAudioCodecConfig.getTag() ==
+      LeAudioCodecConfiguration::lc3Config) {
+    LOG(FATAL) << __func__ << ": unexpected codec type(vendor?)";
   }
+  auto& le_codec_config = unicast_config.leAudioCodecConfig
+                              .get<LeAudioCodecConfiguration::lc3Config>();
 
+  hidl_lc3_codec_config.lc3Config = to_hidl_lc3_config_2_1(le_codec_config);
+
+  for (const auto& map : unicast_config.streamMap) {
+    hidl_lc3_codec_config.audioChannelAllocation |= map.audioChannelAllocation;
+  }
   return hidl_lc3_codec_config;
 }
 
-inline LeAudioConfig_2_2 to_hidl_leaudio_config_2_2(
-    const LeAudioConfiguration& leaudio_config) {
-  LeAudioConfig_2_2 hidl_leaudio_config;
-
-  if (leaudio_config.modeConfig.getTag() ==
-      LeAudioConfiguration::LeAudioModeConfig::unicastConfig) {
-    hidl_leaudio_config.mode = LeAudioMode_2_2::UNICAST;
-    auto& unicast_config =
-        leaudio_config.modeConfig
-            .get<LeAudioConfiguration::LeAudioModeConfig::unicastConfig>();
-    ::android::hardware::bluetooth::audio::V2_2::UnicastConfig
-        hidl_unicast_config;
-    hidl_unicast_config.peerDelay =
-        static_cast<uint32_t>(unicast_config.peerDelay);
-
-    auto& lc3_config = unicast_config.leAudioCodecConfig
-                           .get<LeAudioCodecConfiguration::lc3Config>();
-    hidl_unicast_config.lc3Config = to_hidl_lc3_config_2_1(lc3_config);
-
-    hidl_unicast_config.streamMap.resize(unicast_config.streamMap.size());
-    for (int i = 0; i < unicast_config.streamMap.size(); i++) {
-      hidl_unicast_config.streamMap[i].audioChannelAllocation =
-          static_cast<uint32_t>(
-              unicast_config.streamMap[i].audioChannelAllocation);
-      hidl_unicast_config.streamMap[i].streamHandle =
-          static_cast<uint16_t>(unicast_config.streamMap[i].streamHandle);
-    }
-  } else if (leaudio_config.modeConfig.getTag() ==
-             LeAudioConfiguration::LeAudioModeConfig::broadcastConfig) {
-    hidl_leaudio_config.mode = LeAudioMode_2_2::BROADCAST;
-    auto bcast_config =
-        leaudio_config.modeConfig
-            .get<LeAudioConfiguration::LeAudioModeConfig::broadcastConfig>();
-    ::android::hardware::bluetooth::audio::V2_2::BroadcastConfig
-        hidl_bcast_config;
-    hidl_bcast_config.streamMap.resize(bcast_config.streamMap.size());
-    for (int i = 0; i < bcast_config.streamMap.size(); i++) {
-      hidl_bcast_config.streamMap[i].audioChannelAllocation =
-          static_cast<uint32_t>(
-              bcast_config.streamMap[i].audioChannelAllocation);
-      hidl_bcast_config.streamMap[i].streamHandle =
-          static_cast<uint16_t>(bcast_config.streamMap[i].streamHandle);
-      hidl_bcast_config.streamMap[i].lc3Config = to_hidl_lc3_config_2_1(
-          bcast_config.streamMap[i]
-              .leAudioCodecConfig.get<LeAudioCodecConfiguration::lc3Config>());
-    }
+inline Lc3CodecConfig_2_1 to_hidl_leaudio_broadcast_config_2_1(
+    const LeAudioBroadcastConfiguration& broadcast_config) {
+  Lc3CodecConfig_2_1 hidl_lc3_codec_config = {
+      .audioChannelAllocation = 0,
+  };
+  // NOTE: Broadcast is not officially supported in HIDL
+  if (broadcast_config.streamMap.empty()) {
+    return hidl_lc3_codec_config;
   }
-  return hidl_leaudio_config;
+  if (broadcast_config.streamMap[0].leAudioCodecConfig.getTag() !=
+      LeAudioCodecConfiguration::lc3Config) {
+    LOG(FATAL) << __func__ << ": unexpected codec type(vendor?)";
+  }
+  auto& le_codec_config =
+      broadcast_config.streamMap[0]
+          .leAudioCodecConfig.get<LeAudioCodecConfiguration::lc3Config>();
+  hidl_lc3_codec_config.lc3Config = to_hidl_lc3_config_2_1(le_codec_config);
+
+  for (const auto& map : broadcast_config.streamMap) {
+    hidl_lc3_codec_config.audioChannelAllocation |= map.audioChannelAllocation;
+  }
+  return hidl_lc3_codec_config;
 }
 
 inline AudioConfig_2_1 to_hidl_audio_config_2_1(
@@ -532,25 +471,9 @@ inline AudioConfig_2_1 to_hidl_audio_config_2_1(
       hidl_audio_config.leAudioCodecConfig(to_hidl_leaudio_config_2_1(
           audio_config.get<AudioConfiguration::leAudioConfig>()));
       break;
-  }
-  return hidl_audio_config;
-}
-
-inline AudioConfig_2_2 to_hidl_audio_config_2_2(
-    const AudioConfiguration& audio_config) {
-  AudioConfig_2_2 hidl_audio_config;
-  switch (audio_config.getTag()) {
-    case AudioConfiguration::pcmConfig:
-      hidl_audio_config.pcmConfig(to_hidl_pcm_config_2_1(
-          audio_config.get<AudioConfiguration::pcmConfig>()));
-      break;
-    case AudioConfiguration::a2dpConfig:
-      hidl_audio_config.codecConfig(to_hidl_codec_config_2_0(
-          audio_config.get<AudioConfiguration::a2dpConfig>()));
-      break;
-    case AudioConfiguration::leAudioConfig:
-      hidl_audio_config.leAudioConfig(to_hidl_leaudio_config_2_2(
-          audio_config.get<AudioConfiguration::leAudioConfig>()));
+    case AudioConfiguration::leAudioBroadcastConfig:
+      hidl_audio_config.leAudioCodecConfig(to_hidl_leaudio_broadcast_config_2_1(
+          audio_config.get<AudioConfiguration::leAudioBroadcastConfig>()));
       break;
   }
   return hidl_audio_config;
@@ -571,18 +494,58 @@ bool HidlToAidlMiddleware_2_0::IsSessionReady(
 uint16_t HidlToAidlMiddleware_2_0::RegisterControlResultCback(
     const SessionType_2_0& session_type,
     const PortStatusCallbacks_2_0& cbacks) {
-  PortStatusCallbacks_2_2 callback_2_2{
-      .control_result_cb_ = cbacks.control_result_cb_,
-      .session_changed_cb_ = cbacks.session_changed_cb_,
+  LOG(INFO) << __func__ << ": " << toString(session_type);
+  auto aidl_session_type = from_session_type_2_0(session_type);
+  // Pass the exact reference to the lambda
+  auto& session_legacy_callback_table =
+      legacy_callback_table[aidl_session_type];
+  PortStatusCallbacks aidl_callbacks{};
+  if (cbacks.control_result_cb_) {
+    aidl_callbacks.control_result_cb_ =
+        [&session_legacy_callback_table](uint16_t cookie, bool start_resp,
+                                         const BluetoothAudioStatus& status) {
+          if (session_legacy_callback_table.find(cookie) ==
+              session_legacy_callback_table.end()) {
+            LOG(ERROR) << __func__ << ": Unknown callback invoked!";
+            return;
+          }
+          auto& cback = session_legacy_callback_table[cookie];
+          cback->control_result_cb_(cookie, start_resp, to_hidl_status(status));
+        };
+  }
+  if (cbacks.session_changed_cb_) {
+    aidl_callbacks.session_changed_cb_ =
+        [&session_legacy_callback_table](uint16_t cookie) {
+          if (session_legacy_callback_table.find(cookie) ==
+              session_legacy_callback_table.end()) {
+            LOG(ERROR) << __func__ << ": Unknown callback invoked!";
+            return;
+          }
+          auto& cback = session_legacy_callback_table[cookie];
+          cback->session_changed_cb_(cookie);
+        };
   };
-  return HidlToAidlMiddleware_2_2::RegisterControlResultCback(
-      static_cast<SessionType_2_1>(session_type), callback_2_2);
+  auto cookie = BluetoothAudioSessionControl::RegisterControlResultCback(
+      aidl_session_type, aidl_callbacks);
+  {
+    std::lock_guard<std::mutex> guard(legacy_callback_lock);
+    session_legacy_callback_table[cookie] =
+        std::make_shared<PortStatusCallbacks_2_0>(cbacks);
+  }
+  return cookie;
 }
 
 void HidlToAidlMiddleware_2_0::UnregisterControlResultCback(
     const SessionType_2_0& session_type, uint16_t cookie) {
-  HidlToAidlMiddleware_2_2::UnregisterControlResultCback(
-      static_cast<SessionType_2_1>(session_type), cookie);
+  LOG(INFO) << __func__ << ": " << toString(session_type);
+  auto aidl_session_type = from_session_type_2_0(session_type);
+  BluetoothAudioSessionControl::UnregisterControlResultCback(aidl_session_type,
+                                                             cookie);
+  auto& session_callback_table = legacy_callback_table[aidl_session_type];
+  if (session_callback_table.find(cookie) != session_callback_table.end()) {
+    std::lock_guard<std::mutex> guard(legacy_callback_lock);
+    session_callback_table.erase(cookie);
+  }
 }
 
 const AudioConfig_2_0 HidlToAidlMiddleware_2_0::GetAudioConfig(
@@ -660,124 +623,6 @@ const AudioConfig_2_1 HidlToAidlMiddleware_2_1::GetAudioConfig(
     const SessionType_2_1& session_type) {
   return to_hidl_audio_config_2_1(BluetoothAudioSessionControl::GetAudioConfig(
       from_session_type_2_1(session_type)));
-}
-
-/***
- *
- * 2.2
- *
- ***/
-
-bool HidlToAidlMiddleware_2_2::IsSessionReady(
-    const SessionType_2_1& session_type) {
-  return BluetoothAudioSessionControl::IsSessionReady(
-      from_session_type_2_1(session_type));
-}
-
-uint16_t HidlToAidlMiddleware_2_2::RegisterControlResultCback(
-    const SessionType_2_1& session_type,
-    const PortStatusCallbacks_2_2& cbacks) {
-  LOG(INFO) << __func__ << ": " << toString(session_type);
-  auto aidl_session_type = from_session_type_2_1(session_type);
-  // Pass the exact reference to the lambda
-  auto& session_legacy_callback_table =
-      legacy_callback_table[aidl_session_type];
-  PortStatusCallbacks aidl_callbacks{};
-  if (cbacks.control_result_cb_) {
-    aidl_callbacks.control_result_cb_ =
-        [&session_legacy_callback_table](uint16_t cookie, bool start_resp,
-                                         const BluetoothAudioStatus& status) {
-          if (session_legacy_callback_table.find(cookie) ==
-              session_legacy_callback_table.end()) {
-            LOG(ERROR) << __func__ << ": Unknown callback invoked!";
-            return;
-          }
-          auto& cback = session_legacy_callback_table[cookie];
-          cback->control_result_cb_(cookie, start_resp, to_hidl_status(status));
-        };
-  }
-  if (cbacks.session_changed_cb_) {
-    aidl_callbacks.session_changed_cb_ =
-        [&session_legacy_callback_table](uint16_t cookie) {
-          if (session_legacy_callback_table.find(cookie) ==
-              session_legacy_callback_table.end()) {
-            LOG(ERROR) << __func__ << ": Unknown callback invoked!";
-            return;
-          }
-          auto& cback = session_legacy_callback_table[cookie];
-          cback->session_changed_cb_(cookie);
-        };
-  };
-  if (cbacks.audio_configuration_changed_cb_) {
-    aidl_callbacks.audio_configuration_changed_cb_ =
-        [&session_legacy_callback_table](uint16_t cookie) {
-          if (session_legacy_callback_table.find(cookie) ==
-              session_legacy_callback_table.end()) {
-            LOG(ERROR) << __func__ << ": Unknown callback invoked!";
-            return;
-          }
-          auto& cback = session_legacy_callback_table[cookie];
-          cback->audio_configuration_changed_cb_(cookie);
-        };
-  };
-  auto cookie = BluetoothAudioSessionControl::RegisterControlResultCback(
-      aidl_session_type, aidl_callbacks);
-  {
-    std::lock_guard<std::mutex> guard(legacy_callback_lock);
-    session_legacy_callback_table[cookie] =
-        std::make_shared<PortStatusCallbacks_2_2>(cbacks);
-  }
-  return cookie;
-}
-
-void HidlToAidlMiddleware_2_2::UnregisterControlResultCback(
-    const SessionType_2_1& session_type, uint16_t cookie) {
-  LOG(INFO) << __func__ << ": " << toString(session_type);
-  auto aidl_session_type = from_session_type_2_1(session_type);
-  BluetoothAudioSessionControl::UnregisterControlResultCback(aidl_session_type,
-                                                             cookie);
-  auto& session_callback_table = legacy_callback_table[aidl_session_type];
-  if (session_callback_table.find(cookie) != session_callback_table.end()) {
-    std::lock_guard<std::mutex> guard(legacy_callback_lock);
-    session_callback_table.erase(cookie);
-  }
-}
-
-const AudioConfig_2_2 HidlToAidlMiddleware_2_2::GetAudioConfig(
-    const SessionType_2_1& session_type) {
-  return to_hidl_audio_config_2_2(BluetoothAudioSessionControl::GetAudioConfig(
-      from_session_type_2_1(session_type)));
-}
-
-bool HidlToAidlMiddleware_2_2::StartStream(
-    const SessionType_2_1& session_type) {
-  return BluetoothAudioSessionControl::StartStream(
-      from_session_type_2_1(session_type));
-}
-
-bool HidlToAidlMiddleware_2_2::SuspendStream(
-    const SessionType_2_1& session_type) {
-  return BluetoothAudioSessionControl::SuspendStream(
-      from_session_type_2_1(session_type));
-}
-
-void HidlToAidlMiddleware_2_2::StopStream(const SessionType_2_1& session_type) {
-  return BluetoothAudioSessionControl::StopStream(
-      from_session_type_2_1(session_type));
-}
-
-void HidlToAidlMiddleware_2_2::UpdateTracksMetadata(
-    const SessionType_2_1& session_type,
-    const struct source_metadata* source_metadata) {
-  return BluetoothAudioSessionControl::UpdateSourceMetadata(
-      from_session_type_2_1(session_type), *source_metadata);
-}
-
-void HidlToAidlMiddleware_2_2::UpdateSinkMetadata(
-    const SessionType_2_1& session_type,
-    const struct sink_metadata* sink_metadata) {
-  return BluetoothAudioSessionControl::UpdateSinkMetadata(
-      from_session_type_2_1(session_type), *sink_metadata);
 }
 
 }  // namespace audio

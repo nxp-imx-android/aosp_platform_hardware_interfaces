@@ -34,11 +34,15 @@ BluetoothAudioProvider::BluetoothAudioProvider() {
 
 ndk::ScopedAStatus BluetoothAudioProvider::startSession(
     const std::shared_ptr<IBluetoothAudioPort>& host_if,
-    const AudioConfiguration& audio_config, DataMQDesc* _aidl_return) {
+    const AudioConfiguration& audio_config,
+    const std::vector<LatencyMode>& latencyModes,
+    DataMQDesc* _aidl_return) {
   if (host_if == nullptr) {
     *_aidl_return = DataMQDesc();
     return ndk::ScopedAStatus::fromExceptionCode(EX_ILLEGAL_ARGUMENT);
   }
+
+  latency_modes_ = latencyModes;
   audio_config_ = std::make_unique<AudioConfiguration>(audio_config);
   stack_iface_ = host_if;
 
@@ -118,6 +122,21 @@ ndk::ScopedAStatus BluetoothAudioProvider::updateAudioConfiguration(
   audio_config_ = std::make_unique<AudioConfiguration>(audio_config);
   BluetoothAudioSessionReport::ReportAudioConfigChanged(session_type_,
                                                         *audio_config_);
+  return ndk::ScopedAStatus::ok();
+}
+
+ndk::ScopedAStatus BluetoothAudioProvider::setLowLatencyModeAllowed(
+    bool allowed) {
+  LOG(INFO) << __func__ << " - SessionType=" << toString(session_type_);
+
+  if (stack_iface_ == nullptr) {
+    LOG(INFO) << __func__ << " - SessionType=" << toString(session_type_)
+              << " has NO session";
+    return ndk::ScopedAStatus::fromExceptionCode(EX_ILLEGAL_ARGUMENT);
+  }
+  LOG(INFO) << __func__ << " - allowed " << allowed;
+  BluetoothAudioSessionReport::ReportLowLatencyModeAllowedChanged(
+    session_type_, allowed);
   return ndk::ScopedAStatus::ok();
 }
 

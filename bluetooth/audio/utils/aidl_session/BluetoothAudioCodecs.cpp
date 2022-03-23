@@ -132,9 +132,13 @@ static AudioLocation monoAudio = AudioLocation::UNKNOWN;
 // Stores the supported setting of audio location, connected device, and the
 // channel count for each device
 std::vector<std::tuple<AudioLocation, uint8_t, uint8_t>>
-    supportedDeviceSetting = {std::make_tuple(stereoAudio, 2, 1),
-                              std::make_tuple(monoAudio, 1, 2),
-                              std::make_tuple(monoAudio, 1, 1)};
+    supportedDeviceSetting = {
+        // Stereo, two connected device, one for L one for R
+        std::make_tuple(stereoAudio, 2, 1),
+        // Stereo, one connected device for both L and R
+        std::make_tuple(stereoAudio, 1, 2),
+        // Mono
+        std::make_tuple(monoAudio, 1, 1)};
 
 template <class T>
 bool BluetoothAudioCodecs::ContainedInVector(
@@ -303,7 +307,9 @@ bool BluetoothAudioCodecs::IsOffloadLeAudioConfigurationValid(
   if (session_type !=
           SessionType::LE_AUDIO_HARDWARE_OFFLOAD_ENCODING_DATAPATH &&
       session_type !=
-          SessionType::LE_AUDIO_HARDWARE_OFFLOAD_DECODING_DATAPATH) {
+          SessionType::LE_AUDIO_HARDWARE_OFFLOAD_DECODING_DATAPATH &&
+      session_type !=
+          SessionType::LE_AUDIO_BROADCAST_HARDWARE_OFFLOAD_ENCODING_DATAPATH) {
     return false;
   }
   return true;
@@ -356,6 +362,7 @@ BluetoothAudioCodecs::GetA2dpOffloadCodecCapabilities(
         break;
       case CodecType::UNKNOWN:
       case CodecType::VENDOR:
+      case CodecType::APTX_ADAPTIVE:
         break;
     }
   }
@@ -419,6 +426,7 @@ bool BluetoothAudioCodecs::IsOffloadCodecConfigurationValid(
         return true;
       }
       break;
+    case CodecType::APTX_ADAPTIVE:
     case CodecType::UNKNOWN:
     case CodecType::VENDOR:
       break;
@@ -445,7 +453,9 @@ BluetoothAudioCodecs::GetLeAudioOffloadCodecCapabilities(
   if (session_type !=
           SessionType::LE_AUDIO_HARDWARE_OFFLOAD_ENCODING_DATAPATH &&
       session_type !=
-          SessionType::LE_AUDIO_HARDWARE_OFFLOAD_DECODING_DATAPATH) {
+          SessionType::LE_AUDIO_HARDWARE_OFFLOAD_DECODING_DATAPATH &&
+      session_type !=
+          SessionType::LE_AUDIO_BROADCAST_HARDWARE_OFFLOAD_ENCODING_DATAPATH) {
     return std::vector<LeAudioCodecCapabilitiesSetting>(0);
   }
 

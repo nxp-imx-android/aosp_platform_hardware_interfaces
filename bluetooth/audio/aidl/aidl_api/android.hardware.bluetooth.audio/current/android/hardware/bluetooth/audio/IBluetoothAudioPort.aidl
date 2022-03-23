@@ -35,9 +35,10 @@ package android.hardware.bluetooth.audio;
 @VintfStability
 interface IBluetoothAudioPort {
   android.hardware.bluetooth.audio.PresentationPosition getPresentationPosition();
-  void startStream();
+  void startStream(boolean isLowLatency);
   void stopStream();
   void suspendStream();
   void updateSourceMetadata(in android.hardware.audio.common.SourceMetadata sourceMetadata);
   void updateSinkMetadata(in android.hardware.audio.common.SinkMetadata sinkMetadata);
+  void setLatencyMode(in android.hardware.bluetooth.audio.LatencyMode latencyMode);
 }

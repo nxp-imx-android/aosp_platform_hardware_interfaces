@@ -46,7 +46,8 @@ BluetoothAudioSession::BluetoothAudioSession(const SessionType& session_type)
 
 void BluetoothAudioSession::OnSessionStarted(
     const std::shared_ptr<IBluetoothAudioPort> stack_iface,
-    const DataMQDesc* mq_desc, const AudioConfiguration& audio_config) {
+    const DataMQDesc* mq_desc, const AudioConfiguration& audio_config,
+    const std::vector<LatencyMode>& latency_modes) {
   std::lock_guard<std::recursive_mutex> guard(mutex_);
   if (stack_iface == nullptr) {
     LOG(ERROR) << __func__ << " - SessionType=" << toString(session_type_)
@@ -61,6 +62,7 @@ void BluetoothAudioSession::OnSessionStarted(
     audio_config_ = nullptr;
   } else {
     stack_iface_ = stack_iface;
+    latency_modes_ = latency_modes;
     LOG(INFO) << __func__ << " - SessionType=" << toString(session_type_)
               << ", AudioConfiguration=" << audio_config.toString();
     ReportSessionStatus();
@@ -94,6 +96,8 @@ const AudioConfiguration BluetoothAudioSession::GetAudioConfig() {
       case SessionType::LE_AUDIO_HARDWARE_OFFLOAD_ENCODING_DATAPATH:
       case SessionType::LE_AUDIO_HARDWARE_OFFLOAD_DECODING_DATAPATH:
         return AudioConfiguration(LeAudioConfiguration{});
+      case SessionType::LE_AUDIO_BROADCAST_HARDWARE_OFFLOAD_ENCODING_DATAPATH:
+        return AudioConfiguration(LeAudioBroadcastConfiguration{});
       default:
         return AudioConfiguration(PcmConfiguration{});
     }
@@ -137,6 +141,8 @@ bool BluetoothAudioSession::IsSessionReady() {
            SessionType::LE_AUDIO_HARDWARE_OFFLOAD_ENCODING_DATAPATH ||
        session_type_ ==
            SessionType::LE_AUDIO_HARDWARE_OFFLOAD_DECODING_DATAPATH ||
+       session_type_ ==
+           SessionType::LE_AUDIO_BROADCAST_HARDWARE_OFFLOAD_ENCODING_DATAPATH ||
        (data_mq_ != nullptr && data_mq_->isValid()));
   return stack_iface_ != nullptr && is_mq_valid && audio_config_ != nullptr;
 }
@@ -187,14 +193,14 @@ void BluetoothAudioSession::UnregisterStatusCback(uint16_t cookie) {
  *
  ***/
 
-bool BluetoothAudioSession::StartStream() {
+bool BluetoothAudioSession::StartStream(bool is_low_latency) {
   std::lock_guard<std::recursive_mutex> guard(mutex_);
   if (!IsSessionReady()) {
     LOG(DEBUG) << __func__ << " - SessionType=" << toString(session_type_)
                << " has NO session";
     return false;
   }
-  auto hal_retval = stack_iface_->startStream();
+  auto hal_retval = stack_iface_->startStream(is_low_latency);
   if (!hal_retval.isOk()) {
     LOG(WARNING) << __func__ << " - IBluetoothAudioPort SessionType="
                  << toString(session_type_) << " failed";
@@ -259,7 +265,9 @@ bool BluetoothAudioSession::UpdateAudioConfig(
       (session_type_ == SessionType::A2DP_SOFTWARE_ENCODING_DATAPATH ||
        session_type_ == SessionType::HEARING_AID_SOFTWARE_ENCODING_DATAPATH ||
        session_type_ == SessionType::LE_AUDIO_SOFTWARE_DECODING_DATAPATH ||
-       session_type_ == SessionType::LE_AUDIO_SOFTWARE_ENCODING_DATAPATH);
+       session_type_ == SessionType::LE_AUDIO_SOFTWARE_ENCODING_DATAPATH ||
+       session_type_ ==
+           SessionType::LE_AUDIO_BROADCAST_SOFTWARE_ENCODING_DATAPATH);
   bool is_offload_a2dp_session =
       (session_type_ == SessionType::A2DP_HARDWARE_OFFLOAD_ENCODING_DATAPATH);
   bool is_offload_le_audio_session =
@@ -410,6 +418,25 @@ void BluetoothAudioSession::ReportControlStatus(bool start_resp,
   }
 }
 
+void BluetoothAudioSession::ReportLowLatencyModeAllowedChanged(bool allowed) {
+  std::lock_guard<std::recursive_mutex> guard(mutex_);
+  low_latency_allowed_ = allowed;
+  if (observers_.empty()) {
+    LOG(WARNING) << __func__ << " - SessionType=" << toString(session_type_)
+                 << " has NO port state observer";
+    return;
+  }
+  for (auto& observer : observers_) {
+    uint16_t cookie = observer.first;
+    std::shared_ptr<PortStatusCallbacks> callback = observer.second;
+    LOG(INFO) << __func__
+              << " - allowed=" << (allowed ? " allowed" : " disallowed");
+    if (callback->low_latency_mode_allowed_cb_ != nullptr) {
+      callback->low_latency_mode_allowed_cb_(cookie, allowed);
+    }
+  }
+}
+
 bool BluetoothAudioSession::GetPresentationPosition(
     PresentationPosition& presentation_position) {
   std::lock_guard<std::recursive_mutex> guard(mutex_);
@@ -502,6 +529,39 @@ void BluetoothAudioSession::UpdateSinkMetadata(
   }
 
   auto hal_retval = stack_iface_->updateSinkMetadata(hal_sink_metadata);
+  if (!hal_retval.isOk()) {
+    LOG(WARNING) << __func__ << " - IBluetoothAudioPort SessionType="
+                 << toString(session_type_) << " failed";
+  }
+}
+
+std::vector<LatencyMode> BluetoothAudioSession::GetSupportedLatencyModes() {
+  std::lock_guard<std::recursive_mutex> guard(mutex_);
+  if (!IsSessionReady()) {
+    LOG(DEBUG) << __func__ << " - SessionType=" << toString(session_type_)
+               << " has NO session";
+    return std::vector<LatencyMode>();
+  }
+  if (low_latency_allowed_) return latency_modes_;
+  std::vector<LatencyMode> modes;
+  for (LatencyMode mode : latency_modes_) {
+    if (mode == LatencyMode::LOW_LATENCY)
+      // ignore those low latency mode if Bluetooth stack doesn't allow
+      continue;
+    modes.push_back(mode);
+  }
+  return modes;
+}
+
+void BluetoothAudioSession::SetLatencyMode(const LatencyMode& latency_mode) {
+  std::lock_guard<std::recursive_mutex> guard(mutex_);
+  if (!IsSessionReady()) {
+    LOG(DEBUG) << __func__ << " - SessionType=" << toString(session_type_)
+               << " has NO session";
+    return;
+  }
+
+  auto hal_retval = stack_iface_->setLatencyMode(latency_mode);
   if (!hal_retval.isOk()) {
     LOG(WARNING) << __func__ << " - IBluetoothAudioPort SessionType="
                  << toString(session_type_) << " failed";

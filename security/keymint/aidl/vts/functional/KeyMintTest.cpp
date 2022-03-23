@@ -1018,6 +1018,37 @@ TEST_P(NewKeyGenerationTest, Rsa) {
 }
 
 /*
+ * NewKeyGenerationTest.RsaWithMissingValidity
+ *
+ * Verifies that keymint returns an error while generating asymmetric key
+ * without providing NOT_BEFORE and NOT_AFTER parameters.
+ */
+TEST_P(NewKeyGenerationTest, RsaWithMissingValidity) {
+    // Per RFC 5280 4.1.2.5, an undefined expiration (not-after) field should be set to
+    // GeneralizedTime 999912312359559, which is 253402300799000 ms from Jan 1, 1970.
+    constexpr uint64_t kUndefinedExpirationDateTime = 253402300799000;
+
+    vector<uint8_t> key_blob;
+    vector<KeyCharacteristics> key_characteristics;
+    ASSERT_EQ(ErrorCode::MISSING_NOT_BEFORE,
+              GenerateKey(AuthorizationSetBuilder()
+                                  .RsaSigningKey(2048, 65537)
+                                  .Digest(Digest::NONE)
+                                  .Padding(PaddingMode::NONE)
+                                  .Authorization(TAG_CERTIFICATE_NOT_AFTER,
+                                                 kUndefinedExpirationDateTime),
+                          &key_blob, &key_characteristics));
+
+    ASSERT_EQ(ErrorCode::MISSING_NOT_AFTER,
+              GenerateKey(AuthorizationSetBuilder()
+                                  .RsaSigningKey(2048, 65537)
+                                  .Digest(Digest::NONE)
+                                  .Padding(PaddingMode::NONE)
+                                  .Authorization(TAG_CERTIFICATE_NOT_BEFORE, 0),
+                          &key_blob, &key_characteristics));
+}
+
+/*
  * NewKeyGenerationTest.RsaWithAttestation
  *
  * Verifies that keymint can generate all required RSA key sizes with attestation, and that the
@@ -1036,18 +1067,21 @@ TEST_P(NewKeyGenerationTest, RsaWithAttestation) {
     for (auto key_size : ValidKeySizes(Algorithm::RSA)) {
         vector<uint8_t> key_blob;
         vector<KeyCharacteristics> key_characteristics;
-        ASSERT_EQ(ErrorCode::OK,
-                  GenerateKey(AuthorizationSetBuilder()
-                                      .RsaSigningKey(key_size, 65537)
-                                      .Digest(Digest::NONE)
-                                      .Padding(PaddingMode::NONE)
-                                      .AttestationChallenge(challenge)
-                                      .AttestationApplicationId(app_id)
-                                      .Authorization(TAG_NO_AUTH_REQUIRED)
-                                      .Authorization(TAG_CERTIFICATE_SERIAL, serial_blob)
-                                      .Authorization(TAG_CERTIFICATE_SUBJECT, subject_der)
-                                      .SetDefaultValidity(),
-                              &key_blob, &key_characteristics));
+        auto result = GenerateKey(AuthorizationSetBuilder()
+                                          .RsaSigningKey(key_size, 65537)
+                                          .Digest(Digest::NONE)
+                                          .Padding(PaddingMode::NONE)
+                                          .AttestationChallenge(challenge)
+                                          .AttestationApplicationId(app_id)
+                                          .Authorization(TAG_NO_AUTH_REQUIRED)
+                                          .Authorization(TAG_CERTIFICATE_SERIAL, serial_blob)
+                                          .Authorization(TAG_CERTIFICATE_SUBJECT, subject_der)
+                                          .SetDefaultValidity(),
+                                  &key_blob, &key_characteristics);
+        // Strongbox may not support factory provisioned attestation key.
+        if (SecLevel() == SecurityLevel::STRONGBOX) {
+            if (result == ErrorCode::ATTESTATION_KEYS_NOT_PROVISIONED) return;
+        }
 
         ASSERT_GT(key_blob.size(), 0U);
         CheckBaseParams(key_characteristics);
@@ -1169,17 +1203,21 @@ TEST_P(NewKeyGenerationTest, RsaEncryptionWithAttestation) {
 
     vector<uint8_t> key_blob;
     vector<KeyCharacteristics> key_characteristics;
-    ASSERT_EQ(ErrorCode::OK,
-              GenerateKey(AuthorizationSetBuilder()
-                                  .RsaEncryptionKey(key_size, 65537)
-                                  .Padding(PaddingMode::NONE)
-                                  .AttestationChallenge(challenge)
-                                  .AttestationApplicationId(app_id)
-                                  .Authorization(TAG_NO_AUTH_REQUIRED)
-                                  .Authorization(TAG_CERTIFICATE_SERIAL, serial_blob)
-                                  .Authorization(TAG_CERTIFICATE_SUBJECT, subject_der)
-                                  .SetDefaultValidity(),
-                          &key_blob, &key_characteristics));
+    auto result = GenerateKey(AuthorizationSetBuilder()
+                                      .RsaEncryptionKey(key_size, 65537)
+                                      .Padding(PaddingMode::NONE)
+                                      .AttestationChallenge(challenge)
+                                      .AttestationApplicationId(app_id)
+                                      .Authorization(TAG_NO_AUTH_REQUIRED)
+                                      .Authorization(TAG_CERTIFICATE_SERIAL, serial_blob)
+                                      .Authorization(TAG_CERTIFICATE_SUBJECT, subject_der)
+                                      .SetDefaultValidity(),
+                              &key_blob, &key_characteristics);
+    // Strongbox may not support factory provisioned attestation key.
+    if (SecLevel() == SecurityLevel::STRONGBOX) {
+        if (result == ErrorCode::ATTESTATION_KEYS_NOT_PROVISIONED) return;
+    }
+    ASSERT_EQ(ErrorCode::OK, result);
 
     ASSERT_GT(key_blob.size(), 0U);
     AuthorizationSet auths;
@@ -1281,15 +1319,19 @@ TEST_P(NewKeyGenerationTest, RsaWithAttestationMissAppId) {
     vector<uint8_t> key_blob;
     vector<KeyCharacteristics> key_characteristics;
 
-    ASSERT_EQ(ErrorCode::ATTESTATION_APPLICATION_ID_MISSING,
-              GenerateKey(AuthorizationSetBuilder()
-                                  .RsaSigningKey(2048, 65537)
-                                  .Digest(Digest::NONE)
-                                  .Padding(PaddingMode::NONE)
-                                  .AttestationChallenge(challenge)
-                                  .Authorization(TAG_NO_AUTH_REQUIRED)
-                                  .SetDefaultValidity(),
-                          &key_blob, &key_characteristics));
+    auto result = GenerateKey(AuthorizationSetBuilder()
+                                      .RsaSigningKey(2048, 65537)
+                                      .Digest(Digest::NONE)
+                                      .Padding(PaddingMode::NONE)
+                                      .AttestationChallenge(challenge)
+                                      .Authorization(TAG_NO_AUTH_REQUIRED)
+                                      .SetDefaultValidity(),
+                              &key_blob, &key_characteristics);
+    // Strongbox may not support factory provisioned attestation key.
+    if (SecLevel() == SecurityLevel::STRONGBOX) {
+        if (result == ErrorCode::ATTESTATION_KEYS_NOT_PROVISIONED) return;
+    }
+    ASSERT_EQ(ErrorCode::ATTESTATION_APPLICATION_ID_MISSING, result);
 }
 
 /*
@@ -1399,19 +1441,23 @@ TEST_P(NewKeyGenerationTest, LimitedUsageRsaWithAttestation) {
     for (auto key_size : ValidKeySizes(Algorithm::RSA)) {
         vector<uint8_t> key_blob;
         vector<KeyCharacteristics> key_characteristics;
-        ASSERT_EQ(ErrorCode::OK,
-                  GenerateKey(AuthorizationSetBuilder()
-                                      .RsaSigningKey(key_size, 65537)
-                                      .Digest(Digest::NONE)
-                                      .Padding(PaddingMode::NONE)
-                                      .AttestationChallenge(challenge)
-                                      .AttestationApplicationId(app_id)
-                                      .Authorization(TAG_NO_AUTH_REQUIRED)
-                                      .Authorization(TAG_USAGE_COUNT_LIMIT, 1)
-                                      .Authorization(TAG_CERTIFICATE_SERIAL, serial_blob)
-                                      .Authorization(TAG_CERTIFICATE_SUBJECT, subject_der)
-                                      .SetDefaultValidity(),
-                              &key_blob, &key_characteristics));
+        auto result = GenerateKey(AuthorizationSetBuilder()
+                                          .RsaSigningKey(key_size, 65537)
+                                          .Digest(Digest::NONE)
+                                          .Padding(PaddingMode::NONE)
+                                          .AttestationChallenge(challenge)
+                                          .AttestationApplicationId(app_id)
+                                          .Authorization(TAG_NO_AUTH_REQUIRED)
+                                          .Authorization(TAG_USAGE_COUNT_LIMIT, 1)
+                                          .Authorization(TAG_CERTIFICATE_SERIAL, serial_blob)
+                                          .Authorization(TAG_CERTIFICATE_SUBJECT, subject_der)
+                                          .SetDefaultValidity(),
+                                  &key_blob, &key_characteristics);
+        // Strongbox may not support factory provisioned attestation key.
+        if (SecLevel() == SecurityLevel::STRONGBOX) {
+            if (result == ErrorCode::ATTESTATION_KEYS_NOT_PROVISIONED) return;
+        }
+        ASSERT_EQ(ErrorCode::OK, result);
 
         ASSERT_GT(key_blob.size(), 0U);
         CheckBaseParams(key_characteristics);
@@ -1583,6 +1629,35 @@ TEST_P(NewKeyGenerationTest, EcdsaCurve25519MultiPurposeFail) {
 }
 
 /*
+ * NewKeyGenerationTest.EcdsaWithMissingValidity
+ *
+ * Verifies that keymint returns an error while generating asymmetric key
+ * without providing NOT_BEFORE and NOT_AFTER parameters.
+ */
+TEST_P(NewKeyGenerationTest, EcdsaWithMissingValidity) {
+    // Per RFC 5280 4.1.2.5, an undefined expiration (not-after) field should be set to
+    // GeneralizedTime 999912312359559, which is 253402300799000 ms from Jan 1, 1970.
+    constexpr uint64_t kUndefinedExpirationDateTime = 253402300799000;
+
+    vector<uint8_t> key_blob;
+    vector<KeyCharacteristics> key_characteristics;
+    ASSERT_EQ(ErrorCode::MISSING_NOT_BEFORE,
+              GenerateKey(AuthorizationSetBuilder()
+                                  .EcdsaSigningKey(EcCurve::P_256)
+                                  .Digest(Digest::NONE)
+                                  .Authorization(TAG_CERTIFICATE_NOT_AFTER,
+                                                 kUndefinedExpirationDateTime),
+                          &key_blob, &key_characteristics));
+
+    ASSERT_EQ(ErrorCode::MISSING_NOT_AFTER,
+              GenerateKey(AuthorizationSetBuilder()
+                                  .EcdsaSigningKey(EcCurve::P_256)
+                                  .Digest(Digest::NONE)
+                                  .Authorization(TAG_CERTIFICATE_NOT_BEFORE, 0),
+                          &key_blob, &key_characteristics));
+}
+
+/*
  * NewKeyGenerationTest.EcdsaAttestation
  *
  * Verifies that for all Ecdsa key sizes, if challenge and app id is provided,
@@ -1601,17 +1676,21 @@ TEST_P(NewKeyGenerationTest, EcdsaAttestation) {
     for (auto curve : ValidCurves()) {
         vector<uint8_t> key_blob;
         vector<KeyCharacteristics> key_characteristics;
-        ASSERT_EQ(ErrorCode::OK,
-                  GenerateKey(AuthorizationSetBuilder()
-                                      .Authorization(TAG_NO_AUTH_REQUIRED)
-                                      .EcdsaSigningKey(curve)
-                                      .Digest(Digest::NONE)
-                                      .AttestationChallenge(challenge)
-                                      .AttestationApplicationId(app_id)
-                                      .Authorization(TAG_CERTIFICATE_SERIAL, serial_blob)
-                                      .Authorization(TAG_CERTIFICATE_SUBJECT, subject_der)
-                                      .SetDefaultValidity(),
-                              &key_blob, &key_characteristics));
+        auto result = GenerateKey(AuthorizationSetBuilder()
+                                          .Authorization(TAG_NO_AUTH_REQUIRED)
+                                          .EcdsaSigningKey(curve)
+                                          .Digest(Digest::NONE)
+                                          .AttestationChallenge(challenge)
+                                          .AttestationApplicationId(app_id)
+                                          .Authorization(TAG_CERTIFICATE_SERIAL, serial_blob)
+                                          .Authorization(TAG_CERTIFICATE_SUBJECT, subject_der)
+                                          .SetDefaultValidity(),
+                                  &key_blob, &key_characteristics);
+        // Strongbox may not support factory provisioned attestation key.
+        if (SecLevel() == SecurityLevel::STRONGBOX) {
+            if (result == ErrorCode::ATTESTATION_KEYS_NOT_PROVISIONED) return;
+        }
+        ASSERT_EQ(ErrorCode::OK, result);
         ASSERT_GT(key_blob.size(), 0U);
         CheckBaseParams(key_characteristics);
         CheckCharacteristics(key_blob, key_characteristics);
@@ -1745,6 +1824,10 @@ TEST_P(NewKeyGenerationTest, EcdsaAttestationTags) {
             // Tag not required to be supported by all KeyMint implementations.
             continue;
         }
+        // Strongbox may not support factory provisioned attestation key.
+        if (SecLevel() == SecurityLevel::STRONGBOX) {
+            if (result == ErrorCode::ATTESTATION_KEYS_NOT_PROVISIONED) return;
+        }
         ASSERT_EQ(result, ErrorCode::OK);
         ASSERT_GT(key_blob.size(), 0U);
 
@@ -1840,6 +1923,10 @@ TEST_P(NewKeyGenerationTest, EcdsaAttestationIdTags) {
         AuthorizationSetBuilder builder = base_builder;
         builder.push_back(tag);
         auto result = GenerateKey(builder, &key_blob, &key_characteristics);
+        // Strongbox may not support factory provisioned attestation key.
+        if (SecLevel() == SecurityLevel::STRONGBOX) {
+            if (result == ErrorCode::ATTESTATION_KEYS_NOT_PROVISIONED) return;
+        }
         if (result == ErrorCode::CANNOT_ATTEST_IDS) {
             // Device ID attestation is optional; KeyMint may not support it at all.
             continue;
@@ -1997,6 +2084,10 @@ TEST_P(NewKeyGenerationTest, EcdsaAttestationTagNoApplicationId) {
                                       .Authorization(TAG_CERTIFICATE_SUBJECT, subject_der)
                                       .SetDefaultValidity(),
                               &key_blob, &key_characteristics);
+    // Strongbox may not support factory provisioned attestation key.
+    if (SecLevel() == SecurityLevel::STRONGBOX) {
+        if (result == ErrorCode::ATTESTATION_KEYS_NOT_PROVISIONED) return;
+    }
     ASSERT_EQ(result, ErrorCode::OK);
     ASSERT_GT(key_blob.size(), 0U);
 
@@ -2076,13 +2167,17 @@ TEST_P(NewKeyGenerationTest, EcdsaAttestationRequireAppId) {
     vector<uint8_t> key_blob;
     vector<KeyCharacteristics> key_characteristics;
 
-    ASSERT_EQ(ErrorCode::ATTESTATION_APPLICATION_ID_MISSING,
-              GenerateKey(AuthorizationSetBuilder()
-                                  .EcdsaSigningKey(EcCurve::P_256)
-                                  .Digest(Digest::NONE)
-                                  .AttestationChallenge(challenge)
-                                  .SetDefaultValidity(),
-                          &key_blob, &key_characteristics));
+    auto result = GenerateKey(AuthorizationSetBuilder()
+                                      .EcdsaSigningKey(EcCurve::P_256)
+                                      .Digest(Digest::NONE)
+                                      .AttestationChallenge(challenge)
+                                      .SetDefaultValidity(),
+                              &key_blob, &key_characteristics);
+    // Strongbox may not support factory provisioned attestation key.
+    if (SecLevel() == SecurityLevel::STRONGBOX) {
+        if (result == ErrorCode::ATTESTATION_KEYS_NOT_PROVISIONED) return;
+    }
+    ASSERT_EQ(ErrorCode::ATTESTATION_APPLICATION_ID_MISSING, result);
 }
 
 /*
@@ -2139,14 +2234,19 @@ TEST_P(NewKeyGenerationTest, AttestationApplicationIDLengthProperlyEncoded) {
         const string app_id(length, 'a');
         vector<uint8_t> key_blob;
         vector<KeyCharacteristics> key_characteristics;
-        ASSERT_EQ(ErrorCode::OK, GenerateKey(AuthorizationSetBuilder()
-                                                     .Authorization(TAG_NO_AUTH_REQUIRED)
-                                                     .EcdsaSigningKey(EcCurve::P_256)
-                                                     .Digest(Digest::NONE)
-                                                     .AttestationChallenge(challenge)
-                                                     .AttestationApplicationId(app_id)
-                                                     .SetDefaultValidity(),
-                                             &key_blob, &key_characteristics));
+        auto result = GenerateKey(AuthorizationSetBuilder()
+                                          .Authorization(TAG_NO_AUTH_REQUIRED)
+                                          .EcdsaSigningKey(EcCurve::P_256)
+                                          .Digest(Digest::NONE)
+                                          .AttestationChallenge(challenge)
+                                          .AttestationApplicationId(app_id)
+                                          .SetDefaultValidity(),
+                                  &key_blob, &key_characteristics);
+        // Strongbox may not support factory provisioned attestation key.
+        if (SecLevel() == SecurityLevel::STRONGBOX) {
+            if (result == ErrorCode::ATTESTATION_KEYS_NOT_PROVISIONED) return;
+        }
+        ASSERT_EQ(ErrorCode::OK, result);
         ASSERT_GT(key_blob.size(), 0U);
         CheckBaseParams(key_characteristics);
         CheckCharacteristics(key_blob, key_characteristics);
@@ -3721,6 +3821,13 @@ TEST_P(ImportKeyTest, RsaPublicExponentMismatch) {
  * Verifies that importing an RSA key pair with purpose ATTEST_KEY+SIGN fails.
  */
 TEST_P(ImportKeyTest, RsaAttestMultiPurposeFail) {
+    if (AidlVersion() < 2) {
+        // The KeyMint v1 spec required that KeyPurpose::ATTEST_KEY not be combined
+        // with other key purposes.  However, this was not checked at the time
+        // so we can only be strict about checking this for implementations of KeyMint
+        // version 2 and above.
+        GTEST_SKIP() << "Single-purpose for KeyPurpose::ATTEST_KEY only strict since KeyMint v2";
+    }
     uint32_t key_size = 2048;
     string key = rsa_2048_key;
 
@@ -3859,6 +3966,13 @@ TEST_P(ImportKeyTest, EcdsaCurveMismatch) {
  * Verifies that importing and using an ECDSA P-256 key pair with purpose ATTEST_KEY+SIGN fails.
  */
 TEST_P(ImportKeyTest, EcdsaAttestMultiPurposeFail) {
+    if (AidlVersion() < 2) {
+        // The KeyMint v1 spec required that KeyPurpose::ATTEST_KEY not be combined
+        // with other key purposes.  However, this was not checked at the time
+        // so we can only be strict about checking this for implementations of KeyMint
+        // version 2 and above.
+        GTEST_SKIP() << "Single-purpose for KeyPurpose::ATTEST_KEY only strict since KeyMint v2";
+    }
     ASSERT_EQ(ErrorCode::INCOMPATIBLE_PURPOSE,
               ImportKey(AuthorizationSetBuilder()
                                 .Authorization(TAG_NO_AUTH_REQUIRED)
@@ -4646,7 +4760,7 @@ typedef KeyMintAidlTestBase EncryptionOperationsTest;
  * Verifies that raw RSA decryption works.
  */
 TEST_P(EncryptionOperationsTest, RsaNoPaddingSuccess) {
-    for (uint64_t exponent : {3, 65537}) {
+    for (uint64_t exponent : ValidExponents()) {
         ASSERT_EQ(ErrorCode::OK, GenerateKey(AuthorizationSetBuilder()
                                                      .Authorization(TAG_NO_AUTH_REQUIRED)
                                                      .RsaEncryptionKey(2048, exponent)
@@ -5341,89 +5455,39 @@ TEST_P(EncryptionOperationsTest, AesCtrRoundTripSuccess) {
 }
 
 /*
- * EncryptionOperationsTest.AesIncremental
+ * EncryptionOperationsTest.AesEcbIncremental
  *
- * Verifies that AES works, all modes, when provided data in various size increments.
+ * Verifies that AES works for ECB block mode, when provided data in various size increments.
  */
-TEST_P(EncryptionOperationsTest, AesIncremental) {
-    auto block_modes = {
-            BlockMode::ECB,
-            BlockMode::CBC,
-            BlockMode::CTR,
-            BlockMode::GCM,
-    };
+TEST_P(EncryptionOperationsTest, AesEcbIncremental) {
+    CheckAesIncrementalEncryptOperation(BlockMode::ECB, 240);
+}
 
-    ASSERT_EQ(ErrorCode::OK, GenerateKey(AuthorizationSetBuilder()
-                                                 .Authorization(TAG_NO_AUTH_REQUIRED)
-                                                 .AesEncryptionKey(128)
-                                                 .BlockMode(block_modes)
-                                                 .Padding(PaddingMode::NONE)
-                                                 .Authorization(TAG_MIN_MAC_LENGTH, 128)));
+/*
+ * EncryptionOperationsTest.AesCbcIncremental
+ *
+ * Verifies that AES works for CBC block mode, when provided data in various size increments.
+ */
+TEST_P(EncryptionOperationsTest, AesCbcIncremental) {
+    CheckAesIncrementalEncryptOperation(BlockMode::CBC, 240);
+}
 
-    for (int increment = 1; increment <= 240; ++increment) {
-        for (auto block_mode : block_modes) {
-            string message(240, 'a');
-            auto params =
-                    AuthorizationSetBuilder().BlockMode(block_mode).Padding(PaddingMode::NONE);
-            if (block_mode == BlockMode::GCM) {
-                params.Authorization(TAG_MAC_LENGTH, 128) /* for GCM */;
-            }
+/*
+ * EncryptionOperationsTest.AesCtrIncremental
+ *
+ * Verifies that AES works for CTR block mode, when provided data in various size increments.
+ */
+TEST_P(EncryptionOperationsTest, AesCtrIncremental) {
+    CheckAesIncrementalEncryptOperation(BlockMode::CTR, 240);
+}
 
-            AuthorizationSet output_params;
-            EXPECT_EQ(ErrorCode::OK, Begin(KeyPurpose::ENCRYPT, params, &output_params));
-
-            string ciphertext;
-            string to_send;
-            for (size_t i = 0; i < message.size(); i += increment) {
-                EXPECT_EQ(ErrorCode::OK, Update(message.substr(i, increment), &ciphertext));
-            }
-            EXPECT_EQ(ErrorCode::OK, Finish(to_send, &ciphertext))
-                    << "Error sending " << to_send << " with block mode " << block_mode;
-
-            switch (block_mode) {
-                case BlockMode::GCM:
-                    EXPECT_EQ(message.size() + 16, ciphertext.size());
-                    break;
-                case BlockMode::CTR:
-                    EXPECT_EQ(message.size(), ciphertext.size());
-                    break;
-                case BlockMode::CBC:
-                case BlockMode::ECB:
-                    EXPECT_EQ(message.size() + message.size() % 16, ciphertext.size());
-                    break;
-            }
-
-            auto iv = output_params.GetTagValue(TAG_NONCE);
-            switch (block_mode) {
-                case BlockMode::CBC:
-                case BlockMode::GCM:
-                case BlockMode::CTR:
-                    ASSERT_TRUE(iv) << "No IV for block mode " << block_mode;
-                    EXPECT_EQ(block_mode == BlockMode::GCM ? 12U : 16U, iv->get().size());
-                    params.push_back(TAG_NONCE, iv->get());
-                    break;
-
-                case BlockMode::ECB:
-                    EXPECT_FALSE(iv) << "ECB mode should not generate IV";
-                    break;
-            }
-
-            EXPECT_EQ(ErrorCode::OK, Begin(KeyPurpose::DECRYPT, params))
-                    << "Decrypt begin() failed for block mode " << block_mode;
-
-            string plaintext;
-            for (size_t i = 0; i < ciphertext.size(); i += increment) {
-                EXPECT_EQ(ErrorCode::OK, Update(ciphertext.substr(i, increment), &plaintext));
-            }
-            ErrorCode error = Finish(to_send, &plaintext);
-            ASSERT_EQ(ErrorCode::OK, error) << "Decryption failed for block mode " << block_mode
-                                            << " and increment " << increment;
-            if (error == ErrorCode::OK) {
-                ASSERT_EQ(message, plaintext) << "Decryption didn't match for block mode "
-                                              << block_mode << " and increment " << increment;
-            }
-        }
-    }
+/*
+ * EncryptionOperationsTest.AesGcmIncremental
+ *
+ * Verifies that AES works for GCM block mode, when provided data in various size increments.
+ */
+TEST_P(EncryptionOperationsTest, AesGcmIncremental) {
+    CheckAesIncrementalEncryptOperation(BlockMode::GCM, 240);
 }
 
 struct AesCtrSp80038aTestVector {
@@ -7209,7 +7273,7 @@ TEST_P(ClearOperationsTest, TooManyOperations) {
     size_t i;
 
     for (i = 0; i < max_operations; i++) {
-        result = Begin(KeyPurpose::ENCRYPT, key_blob_, params, &out_params, op_handles[i]);
+        result = Begin(KeyPurpose::DECRYPT, key_blob_, params, &out_params, op_handles[i]);
         if (ErrorCode::OK != result) {
             break;
         }
@@ -7217,12 +7281,12 @@ TEST_P(ClearOperationsTest, TooManyOperations) {
     EXPECT_EQ(ErrorCode::TOO_MANY_OPERATIONS, result);
     // Try again just in case there's a weird overflow bug
     EXPECT_EQ(ErrorCode::TOO_MANY_OPERATIONS,
-              Begin(KeyPurpose::ENCRYPT, key_blob_, params, &out_params));
+              Begin(KeyPurpose::DECRYPT, key_blob_, params, &out_params));
     for (size_t j = 0; j < i; j++) {
         EXPECT_EQ(ErrorCode::OK, Abort(op_handles[j]))
                 << "Aboort failed for i = " << j << std::endl;
     }
-    EXPECT_EQ(ErrorCode::OK, Begin(KeyPurpose::ENCRYPT, key_blob_, params, &out_params));
+    EXPECT_EQ(ErrorCode::OK, Begin(KeyPurpose::DECRYPT, key_blob_, params, &out_params));
     AbortIfNeeded();
 }
 
@@ -7611,14 +7675,23 @@ TEST_P(EarlyBootKeyTest, CreateAttestedEarlyBootKey) {
             });
 
     for (const auto& keyData : {aesKeyData, hmacKeyData, rsaKeyData, ecdsaKeyData}) {
+        // Strongbox may not support factory attestation. Key creation might fail with
+        // ErrorCode::ATTESTATION_KEYS_NOT_PROVISIONED
+        if (SecLevel() == SecurityLevel::STRONGBOX && keyData.blob.size() == 0U) {
+            continue;
+        }
         ASSERT_GT(keyData.blob.size(), 0U);
         AuthorizationSet crypto_params = SecLevelAuthorizations(keyData.characteristics);
         EXPECT_TRUE(crypto_params.Contains(TAG_EARLY_BOOT_ONLY)) << crypto_params;
     }
     CheckedDeleteKey(&aesKeyData.blob);
     CheckedDeleteKey(&hmacKeyData.blob);
-    CheckedDeleteKey(&rsaKeyData.blob);
-    CheckedDeleteKey(&ecdsaKeyData.blob);
+    if (rsaKeyData.blob.size() != 0U) {
+        CheckedDeleteKey(&rsaKeyData.blob);
+    }
+    if (ecdsaKeyData.blob.size() != 0U) {
+        CheckedDeleteKey(&ecdsaKeyData.blob);
+    }
 }
 
 /*

@@ -50,10 +50,14 @@ cc_test {
     defaults: [
         "keymint_vts_defaults",
     ],
+    tidy_timeout_srcs: [
+        "KeyMintTest.cpp",
+    ],
     srcs: [
         "AttestKeyTest.cpp",
         "DeviceUniqueAttestationTest.cpp",
         "KeyMintTest.cpp",
+        "SecureElementProvisioningTest.cpp",
     ],
     static_libs: [
         "libkeymint_vts_test_utils",
@@ -69,11 +73,17 @@ cc_test_library {
     defaults: [
         "keymint_vts_defaults",
     ],
+    tidy_timeout_srcs: [
+        "KeyMintAidlTestBase.cpp",
+    ],
     srcs: [
         "KeyMintAidlTestBase.cpp",
     ],
     export_include_dirs: [
         ".",
+    ],
+    export_static_lib_headers: [
+        "libkeymint_support",
     ],
     static_libs: [
         "libgmock_ndk",

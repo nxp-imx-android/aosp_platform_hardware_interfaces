@@ -183,6 +183,14 @@ TEST_P(AttestKeyTest, AllRsaSizes) {
  * This test attempts to create an RSA attestation key that also allows signing.
  */
 TEST_P(AttestKeyTest, RsaAttestKeyMultiPurposeFail) {
+    if (AidlVersion() < 2) {
+        // The KeyMint v1 spec required that KeyPurpose::ATTEST_KEY not be combined
+        // with other key purposes.  However, this was not checked at the time
+        // so we can only be strict about checking this for implementations of KeyMint
+        // version 2 and above.
+        GTEST_SKIP() << "Single-purpose for KeyPurpose::ATTEST_KEY only strict since KeyMint v2";
+    }
+
     vector<uint8_t> attest_key_blob;
     vector<KeyCharacteristics> attest_key_characteristics;
     vector<Certificate> attest_key_cert_chain;
@@ -219,18 +227,22 @@ TEST_P(AttestKeyTest, RsaAttestedAttestKeys) {
     AttestationKey attest_key;
     vector<KeyCharacteristics> attest_key_characteristics;
     vector<Certificate> attest_key_cert_chain;
-    ASSERT_EQ(ErrorCode::OK,
-              GenerateKey(AuthorizationSetBuilder()
-                                  .RsaKey(2048, 65537)
-                                  .AttestKey()
-                                  .AttestationChallenge(challenge)
-                                  .AttestationApplicationId(app_id)
-                                  .Authorization(TAG_CERTIFICATE_SERIAL, serial_blob)
-                                  .Authorization(TAG_CERTIFICATE_SUBJECT, subject_der)
-                                  .Authorization(TAG_NO_AUTH_REQUIRED)
-                                  .SetDefaultValidity(),
-                          {} /* attestation signing key */, &attest_key.keyBlob,
-                          &attest_key_characteristics, &attest_key_cert_chain));
+    auto result = GenerateKey(AuthorizationSetBuilder()
+                                      .RsaKey(2048, 65537)
+                                      .AttestKey()
+                                      .AttestationChallenge(challenge)
+                                      .AttestationApplicationId(app_id)
+                                      .Authorization(TAG_CERTIFICATE_SERIAL, serial_blob)
+                                      .Authorization(TAG_CERTIFICATE_SUBJECT, subject_der)
+                                      .Authorization(TAG_NO_AUTH_REQUIRED)
+                                      .SetDefaultValidity(),
+                              {} /* attestation signing key */, &attest_key.keyBlob,
+                              &attest_key_characteristics, &attest_key_cert_chain);
+    // Strongbox may not support factory provisioned attestation key.
+    if (SecLevel() == SecurityLevel::STRONGBOX) {
+        if (result == ErrorCode::ATTESTATION_KEYS_NOT_PROVISIONED) return;
+    }
+    ASSERT_EQ(ErrorCode::OK, result);
 
     EXPECT_GT(attest_key_cert_chain.size(), 1);
     verify_subject_and_serial(attest_key_cert_chain[0], serial_int, subject, false);
@@ -319,18 +331,22 @@ TEST_P(AttestKeyTest, RsaAttestKeyChaining) {
             attest_key_opt = attest_key;
         }
 
-        EXPECT_EQ(ErrorCode::OK,
-                  GenerateKey(AuthorizationSetBuilder()
-                                      .RsaKey(2048, 65537)
-                                      .AttestKey()
-                                      .AttestationChallenge("foo")
-                                      .AttestationApplicationId("bar")
-                                      .Authorization(TAG_NO_AUTH_REQUIRED)
-                                      .Authorization(TAG_CERTIFICATE_SERIAL, serial_blob)
-                                      .Authorization(TAG_CERTIFICATE_SUBJECT, subject_der)
-                                      .SetDefaultValidity(),
-                              attest_key_opt, &key_blob_list[i], &attested_key_characteristics,
-                              &cert_chain_list[i]));
+        auto result = GenerateKey(AuthorizationSetBuilder()
+                                          .RsaKey(2048, 65537)
+                                          .AttestKey()
+                                          .AttestationChallenge("foo")
+                                          .AttestationApplicationId("bar")
+                                          .Authorization(TAG_NO_AUTH_REQUIRED)
+                                          .Authorization(TAG_CERTIFICATE_SERIAL, serial_blob)
+                                          .Authorization(TAG_CERTIFICATE_SUBJECT, subject_der)
+                                          .SetDefaultValidity(),
+                                  attest_key_opt, &key_blob_list[i], &attested_key_characteristics,
+                                  &cert_chain_list[i]);
+        // Strongbox may not support factory provisioned attestation key.
+        if (SecLevel() == SecurityLevel::STRONGBOX) {
+            if (result == ErrorCode::ATTESTATION_KEYS_NOT_PROVISIONED) return;
+        }
+        ASSERT_EQ(ErrorCode::OK, result);
 
         AuthorizationSet hw_enforced = HwEnforcedAuthorizations(attested_key_characteristics);
         AuthorizationSet sw_enforced = SwEnforcedAuthorizations(attested_key_characteristics);
@@ -392,18 +408,22 @@ TEST_P(AttestKeyTest, EcAttestKeyChaining) {
             attest_key_opt = attest_key;
         }
 
-        EXPECT_EQ(ErrorCode::OK,
-                  GenerateKey(AuthorizationSetBuilder()
-                                      .EcdsaKey(EcCurve::P_256)
-                                      .AttestKey()
-                                      .AttestationChallenge("foo")
-                                      .AttestationApplicationId("bar")
-                                      .Authorization(TAG_CERTIFICATE_SERIAL, serial_blob)
-                                      .Authorization(TAG_CERTIFICATE_SUBJECT, subject_der)
-                                      .Authorization(TAG_NO_AUTH_REQUIRED)
-                                      .SetDefaultValidity(),
-                              attest_key_opt, &key_blob_list[i], &attested_key_characteristics,
-                              &cert_chain_list[i]));
+        auto result = GenerateKey(AuthorizationSetBuilder()
+                                          .EcdsaKey(EcCurve::P_256)
+                                          .AttestKey()
+                                          .AttestationChallenge("foo")
+                                          .AttestationApplicationId("bar")
+                                          .Authorization(TAG_CERTIFICATE_SERIAL, serial_blob)
+                                          .Authorization(TAG_CERTIFICATE_SUBJECT, subject_der)
+                                          .Authorization(TAG_NO_AUTH_REQUIRED)
+                                          .SetDefaultValidity(),
+                                  attest_key_opt, &key_blob_list[i], &attested_key_characteristics,
+                                  &cert_chain_list[i]);
+        // Strongbox may not support factory provisioned attestation key.
+        if (SecLevel() == SecurityLevel::STRONGBOX) {
+            if (result == ErrorCode::ATTESTATION_KEYS_NOT_PROVISIONED) return;
+        }
+        ASSERT_EQ(ErrorCode::OK, result);
 
         AuthorizationSet hw_enforced = HwEnforcedAuthorizations(attested_key_characteristics);
         AuthorizationSet sw_enforced = SwEnforcedAuthorizations(attested_key_characteristics);
@@ -441,6 +461,13 @@ TEST_P(AttestKeyTest, EcAttestKeyChaining) {
  * This test attempts to create an EC attestation key that also allows signing.
  */
 TEST_P(AttestKeyTest, EcAttestKeyMultiPurposeFail) {
+    if (AidlVersion() < 2) {
+        // The KeyMint v1 spec required that KeyPurpose::ATTEST_KEY not be combined
+        // with other key purposes.  However, this was not checked at the time
+        // so we can only be strict about checking this for implementations of KeyMint
+        // version 2 and above.
+        GTEST_SKIP() << "Single-purpose for KeyPurpose::ATTEST_KEY only strict since KeyMint v2";
+    }
     vector<uint8_t> attest_key_blob;
     vector<KeyCharacteristics> attest_key_characteristics;
     vector<Certificate> attest_key_cert_chain;
@@ -484,34 +511,37 @@ TEST_P(AttestKeyTest, AlternateAttestKeyChaining) {
             attest_key.keyBlob = key_blob_list[i - 1];
             attest_key_opt = attest_key;
         }
-
+        ErrorCode result;
         if ((i & 0x1) == 1) {
-            EXPECT_EQ(ErrorCode::OK,
-                      GenerateKey(AuthorizationSetBuilder()
-                                          .EcdsaKey(EcCurve::P_256)
-                                          .AttestKey()
-                                          .AttestationChallenge("foo")
-                                          .AttestationApplicationId("bar")
-                                          .Authorization(TAG_CERTIFICATE_SERIAL, serial_blob)
-                                          .Authorization(TAG_CERTIFICATE_SUBJECT, subject_der)
-                                          .Authorization(TAG_NO_AUTH_REQUIRED)
-                                          .SetDefaultValidity(),
-                                  attest_key_opt, &key_blob_list[i], &attested_key_characteristics,
-                                  &cert_chain_list[i]));
+            result = GenerateKey(AuthorizationSetBuilder()
+                                         .EcdsaKey(EcCurve::P_256)
+                                         .AttestKey()
+                                         .AttestationChallenge("foo")
+                                         .AttestationApplicationId("bar")
+                                         .Authorization(TAG_CERTIFICATE_SERIAL, serial_blob)
+                                         .Authorization(TAG_CERTIFICATE_SUBJECT, subject_der)
+                                         .Authorization(TAG_NO_AUTH_REQUIRED)
+                                         .SetDefaultValidity(),
+                                 attest_key_opt, &key_blob_list[i], &attested_key_characteristics,
+                                 &cert_chain_list[i]);
         } else {
-            EXPECT_EQ(ErrorCode::OK,
-                      GenerateKey(AuthorizationSetBuilder()
-                                          .RsaKey(2048, 65537)
-                                          .AttestKey()
-                                          .AttestationChallenge("foo")
-                                          .AttestationApplicationId("bar")
-                                          .Authorization(TAG_CERTIFICATE_SERIAL, serial_blob)
-                                          .Authorization(TAG_CERTIFICATE_SUBJECT, subject_der)
-                                          .Authorization(TAG_NO_AUTH_REQUIRED)
-                                          .SetDefaultValidity(),
-                                  attest_key_opt, &key_blob_list[i], &attested_key_characteristics,
-                                  &cert_chain_list[i]));
+            result = GenerateKey(AuthorizationSetBuilder()
+                                         .RsaKey(2048, 65537)
+                                         .AttestKey()
+                                         .AttestationChallenge("foo")
+                                         .AttestationApplicationId("bar")
+                                         .Authorization(TAG_CERTIFICATE_SERIAL, serial_blob)
+                                         .Authorization(TAG_CERTIFICATE_SUBJECT, subject_der)
+                                         .Authorization(TAG_NO_AUTH_REQUIRED)
+                                         .SetDefaultValidity(),
+                                 attest_key_opt, &key_blob_list[i], &attested_key_characteristics,
+                                 &cert_chain_list[i]);
         }
+        // Strongbox may not support factory provisioned attestation key.
+        if (SecLevel() == SecurityLevel::STRONGBOX) {
+            if (result == ErrorCode::ATTESTATION_KEYS_NOT_PROVISIONED) return;
+        }
+        ASSERT_EQ(ErrorCode::OK, result);
 
         AuthorizationSet hw_enforced = HwEnforcedAuthorizations(attested_key_characteristics);
         AuthorizationSet sw_enforced = SwEnforcedAuthorizations(attested_key_characteristics);

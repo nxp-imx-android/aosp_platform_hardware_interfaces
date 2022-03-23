@@ -32,7 +32,9 @@ class LeAudioSoftwareAudioProvider : public BluetoothAudioProvider {
 
   ndk::ScopedAStatus startSession(
       const std::shared_ptr<IBluetoothAudioPort>& host_if,
-      const AudioConfiguration& audio_config, DataMQDesc* _aidl_return);
+      const AudioConfiguration& audio_config,
+      const std::vector<LatencyMode>& latency_modes,
+      DataMQDesc* _aidl_return);
 
  private:
   // audio data queue for software encoding
@@ -49,6 +51,12 @@ class LeAudioSoftwareOutputAudioProvider : public LeAudioSoftwareAudioProvider {
 class LeAudioSoftwareInputAudioProvider : public LeAudioSoftwareAudioProvider {
  public:
   LeAudioSoftwareInputAudioProvider();
+};
+
+class LeAudioSoftwareBroadcastAudioProvider
+    : public LeAudioSoftwareAudioProvider {
+ public:
+  LeAudioSoftwareBroadcastAudioProvider();
 };
 
 }  // namespace audio

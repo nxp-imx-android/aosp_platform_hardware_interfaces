@@ -18,6 +18,8 @@ package android.hardware.bluetooth.audio;
 
 import android.hardware.audio.common.SinkMetadata;
 import android.hardware.audio.common.SourceMetadata;
+import android.hardware.bluetooth.audio.CodecType;
+import android.hardware.bluetooth.audio.LatencyMode;
 import android.hardware.bluetooth.audio.PresentationPosition;
 
 /**
@@ -45,8 +47,11 @@ interface IBluetoothAudioPort {
      * This indicates that the caller of this method has opened the data path
      * and wants to start an audio stream. The caller must wait for a
      * IBluetoothAudioProvider.streamStarted(Status) call.
+     *
+     * @param isLowLatency true if the stream being started with the latency
+     * control mechanism.
      */
-    void startStream();
+    void startStream(boolean isLowLatency);
 
     /**
      * This indicates that the caller of this method wants to stop the audio
@@ -78,4 +83,11 @@ interface IBluetoothAudioPort {
      * @param sinkMetadata as passed from Audio Framework
      */
     void updateSinkMetadata(in SinkMetadata sinkMetadata);
+
+    /**
+     * Called when latency mode is changed.
+     *
+     * @param latencyMode latency mode from audio
+     */
+    void setLatencyMode(in LatencyMode latencyMode);
 }

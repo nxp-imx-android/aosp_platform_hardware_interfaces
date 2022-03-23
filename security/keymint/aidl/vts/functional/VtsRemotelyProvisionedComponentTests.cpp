@@ -57,6 +57,22 @@ using testing::MatchesRegex;
 using namespace remote_prov;
 using namespace keymaster;
 
+std::set<std::string> getAllowedVbStates() {
+    return {"green", "yellow", "orange"};
+}
+
+std::set<std::string> getAllowedBootloaderStates() {
+    return {"locked", "unlocked"};
+}
+
+std::set<std::string> getAllowedSecurityLevels() {
+    return {"tee", "strongbox"};
+}
+
+std::set<std::string> getAllowedAttIdStates() {
+    return {"locked", "open"};
+}
+
 bytevec string_to_bytevec(const char* s) {
     const uint8_t* p = reinterpret_cast<const uint8_t*>(s);
     return bytevec(p, p + strlen(s));
@@ -169,6 +185,7 @@ class VtsRemotelyProvisionedComponentTests : public testing::TestWithParam<std::
             provisionable_ = IRemotelyProvisionedComponent::fromBinder(binder);
         }
         ASSERT_NE(provisionable_, nullptr);
+        ASSERT_TRUE(provisionable_->getHardwareInfo(&rpcHardwareInfo).isOk());
     }
 
     static vector<string> build_params() {
@@ -178,6 +195,7 @@ class VtsRemotelyProvisionedComponentTests : public testing::TestWithParam<std::
 
   protected:
     std::shared_ptr<IRemotelyProvisionedComponent> provisionable_;
+    RpcHardwareInfo rpcHardwareInfo;
 };
 
 /**
@@ -341,12 +359,11 @@ TEST_P(GenerateKeyTests, generateEcdsaP256Key_testMode) {
 class CertificateRequestTest : public VtsRemotelyProvisionedComponentTests {
   protected:
     CertificateRequestTest() : eekId_(string_to_bytevec("eekid")), challenge_(randomBytes(32)) {
-        generateTestEekChain(3);
     }
 
     void generateTestEekChain(size_t eekLength) {
-        auto chain = generateEekChain(eekLength, eekId_);
-        EXPECT_TRUE(chain) << chain.message();
+        auto chain = generateEekChain(rpcHardwareInfo.supportedEekCurve, eekLength, eekId_);
+        ASSERT_TRUE(chain) << chain.message();
         if (chain) testEekChain_ = chain.moveValue();
         testEekLength_ = eekLength;
     }
@@ -366,6 +383,17 @@ class CertificateRequestTest : public VtsRemotelyProvisionedComponentTests {
         }
     }
 
+    ErrMsgOr<bytevec> getSessionKey(ErrMsgOr<std::pair<bytevec, bytevec>>& senderPubkey) {
+        if (rpcHardwareInfo.supportedEekCurve == RpcHardwareInfo::CURVE_25519 ||
+            rpcHardwareInfo.supportedEekCurve == RpcHardwareInfo::CURVE_NONE) {
+            return x25519_HKDF_DeriveKey(testEekChain_.last_pubkey, testEekChain_.last_privkey,
+                                         senderPubkey->first, false /* senderIsA */);
+        } else {
+            return ECDH_HKDF_DeriveKey(testEekChain_.last_pubkey, testEekChain_.last_privkey,
+                                       senderPubkey->first, false /* senderIsA */);
+        }
+    }
+
     void checkProtectedData(const DeviceInfo& deviceInfo, const cppbor::Array& keysToSign,
                             const bytevec& keysToSignMac, const ProtectedData& protectedData,
                             std::vector<BccEntryData>* bccOutput = nullptr) {
@@ -378,9 +406,7 @@ class CertificateRequestTest : public VtsRemotelyProvisionedComponentTests {
         ASSERT_TRUE(senderPubkey) << senderPubkey.message();
         EXPECT_EQ(senderPubkey->second, eekId_);
 
-        auto sessionKey =
-                x25519_HKDF_DeriveKey(testEekChain_.last_pubkey, testEekChain_.last_privkey,
-                                      senderPubkey->first, false /* senderIsA */);
+        auto sessionKey = getSessionKey(senderPubkey);
         ASSERT_TRUE(sessionKey) << sessionKey.message();
 
         auto protectedDataPayload =
@@ -390,7 +416,8 @@ class CertificateRequestTest : public VtsRemotelyProvisionedComponentTests {
         auto [parsedPayload, __, payloadErrMsg] = cppbor::parse(*protectedDataPayload);
         ASSERT_TRUE(parsedPayload) << "Failed to parse payload: " << payloadErrMsg;
         ASSERT_TRUE(parsedPayload->asArray());
-        EXPECT_EQ(parsedPayload->asArray()->size(), 2U);
+        // Strongbox may contain additional certificate chain.
+        EXPECT_LE(parsedPayload->asArray()->size(), 3U);
 
         auto& signedMac = parsedPayload->asArray()->get(0);
         auto& bcc = parsedPayload->asArray()->get(1);
@@ -405,8 +432,9 @@ class CertificateRequestTest : public VtsRemotelyProvisionedComponentTests {
         auto [deviceInfoMap, __2, deviceInfoErrMsg] = cppbor::parse(deviceInfo.deviceInfo);
         ASSERT_TRUE(deviceInfoMap) << "Failed to parse deviceInfo: " << deviceInfoErrMsg;
         ASSERT_TRUE(deviceInfoMap->asMap());
-
+        checkDeviceInfo(deviceInfoMap->asMap(), deviceInfo.deviceInfo);
         auto& signingKey = bccContents->back().pubKey;
+        deviceInfoMap->asMap()->canonicalize();
         auto macKey = verifyAndParseCoseSign1(signedMac->asArray(), signingKey,
                                               cppbor::Array()  // SignedMacAad
                                                       .add(challenge_)
@@ -429,6 +457,80 @@ class CertificateRequestTest : public VtsRemotelyProvisionedComponentTests {
 
         if (bccOutput) {
             *bccOutput = std::move(*bccContents);
+        }
+    }
+
+    void checkType(const cppbor::Map* devInfo, uint8_t majorType, std::string entryName) {
+        const auto& val = devInfo->get(entryName);
+        ASSERT_TRUE(val) << entryName << " does not exist";
+        ASSERT_EQ(val->type(), majorType) << entryName << " has the wrong type.";
+        switch (majorType) {
+            case cppbor::TSTR:
+                EXPECT_GT(val->asTstr()->value().size(), 0);
+                break;
+            case cppbor::BSTR:
+                EXPECT_GT(val->asBstr()->value().size(), 0);
+                break;
+            default:
+                break;
+        }
+    }
+
+    void checkDeviceInfo(const cppbor::Map* deviceInfo, bytevec deviceInfoBytes) {
+        EXPECT_EQ(deviceInfo->clone()->asMap()->canonicalize().encode(), deviceInfoBytes)
+                << "DeviceInfo ordering is non-canonical.";
+        const auto& version = deviceInfo->get("version");
+        ASSERT_TRUE(version);
+        ASSERT_TRUE(version->asUint());
+        RpcHardwareInfo info;
+        provisionable_->getHardwareInfo(&info);
+        ASSERT_EQ(version->asUint()->value(), info.versionNumber);
+        std::set<std::string> allowList;
+        switch (version->asUint()->value()) {
+            // These fields became mandated in version 2.
+            case 2:
+                checkType(deviceInfo, cppbor::TSTR, "brand");
+                checkType(deviceInfo, cppbor::TSTR, "manufacturer");
+                checkType(deviceInfo, cppbor::TSTR, "product");
+                checkType(deviceInfo, cppbor::TSTR, "model");
+                checkType(deviceInfo, cppbor::TSTR, "device");
+                // TODO: Refactor the KeyMint code that validates these fields and include it here.
+                checkType(deviceInfo, cppbor::TSTR, "vb_state");
+                allowList = getAllowedVbStates();
+                EXPECT_NE(allowList.find(deviceInfo->get("vb_state")->asTstr()->value()),
+                          allowList.end());
+                checkType(deviceInfo, cppbor::TSTR, "bootloader_state");
+                allowList = getAllowedBootloaderStates();
+                EXPECT_NE(allowList.find(deviceInfo->get("bootloader_state")->asTstr()->value()),
+                          allowList.end());
+                checkType(deviceInfo, cppbor::BSTR, "vbmeta_digest");
+                checkType(deviceInfo, cppbor::UINT, "system_patch_level");
+                checkType(deviceInfo, cppbor::UINT, "boot_patch_level");
+                checkType(deviceInfo, cppbor::UINT, "vendor_patch_level");
+                checkType(deviceInfo, cppbor::UINT, "fused");
+                EXPECT_LT(deviceInfo->get("fused")->asUint()->value(), 2);  // Must be 0 or 1.
+                checkType(deviceInfo, cppbor::TSTR, "security_level");
+                allowList = getAllowedSecurityLevels();
+                EXPECT_NE(allowList.find(deviceInfo->get("security_level")->asTstr()->value()),
+                          allowList.end());
+                if (deviceInfo->get("security_level")->asTstr()->value() == "tee") {
+                    checkType(deviceInfo, cppbor::TSTR, "os_version");
+                }
+                break;
+            case 1:
+                checkType(deviceInfo, cppbor::TSTR, "security_level");
+                allowList = getAllowedSecurityLevels();
+                EXPECT_NE(allowList.find(deviceInfo->get("security_level")->asTstr()->value()),
+                          allowList.end());
+                if (version->asUint()->value() == 1) {
+                    checkType(deviceInfo, cppbor::TSTR, "att_id_state");
+                    allowList = getAllowedAttIdStates();
+                    EXPECT_NE(allowList.find(deviceInfo->get("att_id_state")->asTstr()->value()),
+                              allowList.end());
+                }
+                break;
+            default:
+                FAIL() << "Unrecognized version: " << version->asUint()->value();
         }
     }
 
@@ -474,6 +576,7 @@ TEST_P(CertificateRequestTest, NewKeyPerCallInTestMode) {
     bytevec keysToSignMac;
     DeviceInfo deviceInfo;
     ProtectedData protectedData;
+    generateTestEekChain(3);
     auto status = provisionable_->generateCertificateRequest(
             testMode, {} /* keysToSign */, testEekChain_.chain, challenge_, &deviceInfo,
             &protectedData, &keysToSignMac);
@@ -513,8 +616,8 @@ TEST_P(CertificateRequestTest, DISABLED_EmptyRequest_prodMode) {
     DeviceInfo deviceInfo;
     ProtectedData protectedData;
     auto status = provisionable_->generateCertificateRequest(
-            testMode, {} /* keysToSign */, getProdEekChain(), challenge_, &deviceInfo,
-            &protectedData, &keysToSignMac);
+            testMode, {} /* keysToSign */, getProdEekChain(rpcHardwareInfo.supportedEekCurve),
+            challenge_, &deviceInfo, &protectedData, &keysToSignMac);
     EXPECT_TRUE(status.isOk());
 }
 
@@ -554,8 +657,8 @@ TEST_P(CertificateRequestTest, DISABLED_NonEmptyRequest_prodMode) {
     DeviceInfo deviceInfo;
     ProtectedData protectedData;
     auto status = provisionable_->generateCertificateRequest(
-            testMode, keysToSign_, getProdEekChain(), challenge_, &deviceInfo, &protectedData,
-            &keysToSignMac);
+            testMode, keysToSign_, getProdEekChain(rpcHardwareInfo.supportedEekCurve), challenge_,
+            &deviceInfo, &protectedData, &keysToSignMac);
     EXPECT_TRUE(status.isOk());
 }
 
@@ -565,11 +668,14 @@ TEST_P(CertificateRequestTest, DISABLED_NonEmptyRequest_prodMode) {
 TEST_P(CertificateRequestTest, NonEmptyRequestCorruptMac_testMode) {
     bool testMode = true;
     generateKeys(testMode, 1 /* numKeys */);
-    MacedPublicKey keyWithCorruptMac = corrupt_maced_key(keysToSign_[0]).moveValue();
+    auto result = corrupt_maced_key(keysToSign_[0]);
+    ASSERT_TRUE(result) << result.moveMessage();
+    MacedPublicKey keyWithCorruptMac = result.moveValue();
 
     bytevec keysToSignMac;
     DeviceInfo deviceInfo;
     ProtectedData protectedData;
+    generateTestEekChain(3);
     auto status = provisionable_->generateCertificateRequest(
             testMode, {keyWithCorruptMac}, testEekChain_.chain, challenge_, &deviceInfo,
             &protectedData, &keysToSignMac);
@@ -583,14 +689,16 @@ TEST_P(CertificateRequestTest, NonEmptyRequestCorruptMac_testMode) {
 TEST_P(CertificateRequestTest, NonEmptyRequestCorruptMac_prodMode) {
     bool testMode = false;
     generateKeys(testMode, 1 /* numKeys */);
-    MacedPublicKey keyWithCorruptMac = corrupt_maced_key(keysToSign_[0]).moveValue();
+    auto result = corrupt_maced_key(keysToSign_[0]);
+    ASSERT_TRUE(result) << result.moveMessage();
+    MacedPublicKey keyWithCorruptMac = result.moveValue();
 
     bytevec keysToSignMac;
     DeviceInfo deviceInfo;
     ProtectedData protectedData;
     auto status = provisionable_->generateCertificateRequest(
-            testMode, {keyWithCorruptMac}, getProdEekChain(), challenge_, &deviceInfo,
-            &protectedData, &keysToSignMac);
+            testMode, {keyWithCorruptMac}, getProdEekChain(rpcHardwareInfo.supportedEekCurve),
+            challenge_, &deviceInfo, &protectedData, &keysToSignMac);
     ASSERT_FALSE(status.isOk()) << status.getMessage();
     EXPECT_EQ(status.getServiceSpecificError(), BnRemotelyProvisionedComponent::STATUS_INVALID_MAC);
 }
@@ -603,7 +711,7 @@ TEST_P(CertificateRequestTest, NonEmptyCorruptEekRequest_prodMode) {
     bool testMode = false;
     generateKeys(testMode, 4 /* numKeys */);
 
-    auto prodEekChain = getProdEekChain();
+    auto prodEekChain = getProdEekChain(rpcHardwareInfo.supportedEekCurve);
     auto [parsedChain, _, parseErr] = cppbor::parse(prodEekChain);
     ASSERT_NE(parsedChain, nullptr) << parseErr;
     ASSERT_NE(parsedChain->asArray(), nullptr);
@@ -634,7 +742,7 @@ TEST_P(CertificateRequestTest, NonEmptyIncompleteEekRequest_prodMode) {
 
     // Build an EEK chain that omits the first self-signed cert.
     auto truncatedChain = cppbor::Array();
-    auto [chain, _, parseErr] = cppbor::parse(getProdEekChain());
+    auto [chain, _, parseErr] = cppbor::parse(getProdEekChain(rpcHardwareInfo.supportedEekCurve));
     ASSERT_TRUE(chain);
     auto eekChain = chain->asArray();
     ASSERT_NE(eekChain, nullptr);
@@ -662,6 +770,7 @@ TEST_P(CertificateRequestTest, NonEmptyRequest_prodKeyInTestCert) {
     bytevec keysToSignMac;
     DeviceInfo deviceInfo;
     ProtectedData protectedData;
+    generateTestEekChain(3);
     auto status = provisionable_->generateCertificateRequest(
             true /* testMode */, keysToSign_, testEekChain_.chain, challenge_, &deviceInfo,
             &protectedData, &keysToSignMac);
@@ -680,6 +789,7 @@ TEST_P(CertificateRequestTest, NonEmptyRequest_testKeyInProdCert) {
     bytevec keysToSignMac;
     DeviceInfo deviceInfo;
     ProtectedData protectedData;
+    generateTestEekChain(3);
     auto status = provisionable_->generateCertificateRequest(
             false /* testMode */, keysToSign_, testEekChain_.chain, challenge_, &deviceInfo,
             &protectedData, &keysToSignMac);
