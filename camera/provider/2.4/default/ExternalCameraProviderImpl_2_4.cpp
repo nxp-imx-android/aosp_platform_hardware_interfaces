@@ -288,9 +288,12 @@ void ExternalCameraProviderImpl_2_4::deviceRemoved(const char* devName) {
     }
 }
 
-bool ExternalCameraProviderImpl_2_4::isExternalDevice(const char* devName, const char* sysClassName) {
+bool ExternalCameraProviderImpl_2_4::isExternalDevice(const char* devName, const char* sysClassName, bool *isHdmiRx) {
     int32_t ret = -1;
     struct v4l2_capability vidCap;
+    if (isHdmiRx) {
+        *isHdmiRx = false;
+    }
 
     base::unique_fd fd(::open(devName, O_RDWR | O_NONBLOCK));
     if (fd.get() < 0) {
@@ -325,6 +328,9 @@ bool ExternalCameraProviderImpl_2_4::isExternalDevice(const char* devName, const
 
         // string read from ReadFileToString have '\n' in last byte
         if (propName.compare(0,propName.length(),buffer,0,propName.length()) == 0) {
+            if (isHdmiRx) {
+                *isHdmiRx = true;
+            }
             return true;
         }
     }
@@ -361,7 +367,7 @@ bool ExternalCameraProviderImpl_2_4::HotplugThread::threadLoop() {
                 snprintf(v4l2DevicePath, kMaxDevicePathLen,
                         "%s%s", kDevicePath, de->d_name);
                 sprintf(mCamDevice, "/sys/class/video4linux/%s/name", de->d_name);
-                if(mParent->isExternalDevice(v4l2DevicePath, mCamDevice))
+                if(mParent->isExternalDevice(v4l2DevicePath, mCamDevice, NULL))
                     mParent->deviceAdded(v4l2DevicePath);
             }
         }
@@ -385,6 +391,7 @@ bool ExternalCameraProviderImpl_2_4::HotplugThread::threadLoop() {
 
     bool done = false;
     char eventBuf[512];
+    char mHdmiRxNode[kMaxDevicePathLen];
     while (!done) {
         int offset = 0;
         int ret = read(mINotifyFD, eventBuf, sizeof(eventBuf));
@@ -392,6 +399,7 @@ bool ExternalCameraProviderImpl_2_4::HotplugThread::threadLoop() {
             while (offset < ret) {
                 struct inotify_event* event = (struct inotify_event*)&eventBuf[offset];
                 if (event->wd == mWd) {
+                    ALOGI("%s: hot-plug event->name:%s", __FUNCTION__, event->name);
                     if (!strncmp(kPrefix, event->name, kPrefixLen)) {
                         std::string deviceId(event->name + kPrefixLen);
                         if (mInternalDevices.count(deviceId) == 0) {
@@ -403,12 +411,43 @@ bool ExternalCameraProviderImpl_2_4::HotplugThread::threadLoop() {
                             if (event->mask & IN_CREATE) {
                                 // usb camera is not ready until 100ms.
                                 usleep(100000);
-                                if(mParent->isExternalDevice(v4l2DevicePath, mCamDevice))
+                                if(mParent->isExternalDevice(v4l2DevicePath, mCamDevice, NULL))
                                     mParent->deviceAdded(v4l2DevicePath);
                             }
                             if (event->mask & IN_DELETE) {
                                 mParent->deviceRemoved(v4l2DevicePath);
                             }
+                        }
+                    } else if (!strncmp("cec", event->name, 3)) {
+                        // if the event is cec, need to find hdmi-rx node from /dev/video* devices
+                        bool isHdmiRx = false;
+                        char v4l2DevicePath[kMaxDevicePathLen];
+                        char mCamDevice[kMaxDevicePathLen];
+                        if (event->mask & IN_CREATE) {
+                            devdir = opendir(kDevicePath);
+                            if(devdir == 0) {
+                                ALOGE("%s: cannot open %s! Exiting threadloop", __FUNCTION__, kDevicePath);
+                                return false;
+                            }
+                            while ((de = readdir(devdir)) != 0) {
+                                if (!strncmp(kPrefix, de->d_name, kPrefixLen)) {
+                                    snprintf(v4l2DevicePath, kMaxDevicePathLen,
+                                            "%s%s", kDevicePath, de->d_name);
+                                    sprintf(mCamDevice, "/sys/class/video4linux/%s/name", de->d_name);
+                                    // hdmi-rx is not ready until 800ms.
+                                    usleep(800000);
+                                    if(mParent->isExternalDevice(v4l2DevicePath, mCamDevice, &isHdmiRx) && isHdmiRx) {
+                                        strncpy(mHdmiRxNode, v4l2DevicePath, strlen(v4l2DevicePath));
+                                        mParent->deviceAdded(v4l2DevicePath);
+                                        ALOGI("%s: add mHdmiRxNode------:%s", __FUNCTION__, mHdmiRxNode);
+                                        break;
+                                    }
+                                }
+                            }
+                            closedir(devdir);
+                        } else if (event->mask & IN_DELETE) {
+                            mParent->deviceRemoved(mHdmiRxNode);
+                            ALOGI("%s: rmv mHdmiRxNode-------:%s", __FUNCTION__, mHdmiRxNode);
                         }
                     }
                 }
