@@ -83,7 +83,7 @@ private:
 
     void deviceRemoved(const char* devName);
 
-    bool isExternalDevice(const char* devName, const char* sysClassName);
+    bool isExternalDevice(const char* devName, const char* sysClassName, bool *isHdmiRx);
 
     class HotplugThread : public android::Thread {
     public:
