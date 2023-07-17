@@ -257,11 +257,45 @@ void ExternalCameraProvider::updateAttachedCameras() {
                 ALOGV("Non-internal v4l device %s found", de->d_name);
                 char v4l2DevicePath[kMaxDevicePathLen];
                 snprintf(v4l2DevicePath, kMaxDevicePathLen, "%s%s", kDevicePath, de->d_name);
-                deviceAdded(v4l2DevicePath);
+                if(isExternalDevice(v4l2DevicePath))
+                    deviceAdded(v4l2DevicePath);
             }
         }
     }
     closedir(devdir);
+}
+
+bool ExternalCameraProvider::isExternalDevice(const char* devName) {
+    int32_t fd = -1;
+    int32_t ret = -1;
+    struct v4l2_capability vidCap;
+
+    if ((fd = open(devName, O_RDWR | O_NONBLOCK)) < 0) {
+        ALOGE("%s open dev path:%s failed:%s", __func__, devName,strerror(errno));
+        return false;
+    }
+
+    ret = ioctl(fd, VIDIOC_QUERYCAP, &vidCap);
+    if (ret < 0) {
+            ALOGE("%s QUERYCAP dev path:%s failed", __func__, devName);
+            close(fd);
+            fd = -1;
+            return false;
+    }
+
+    if(strstr((const char*)vidCap.driver, "uvc")) {
+        struct v4l2_fmtdesc vid_fmtdesc;
+        vid_fmtdesc.index = 0;
+        vid_fmtdesc.type  = V4L2_BUF_TYPE_VIDEO_CAPTURE;
+
+        ret = ioctl(fd, VIDIOC_ENUM_FMT, &vid_fmtdesc);
+        close(fd);
+        if(ret == 0) {
+            return true;
+        }
+        ALOGE("Although %s driver name has uvc, but it's a uvc meta device", devName);
+    }
+    return false;
 }
 
 // Start ExternalCameraProvider::HotplugThread functions
@@ -363,11 +397,12 @@ bool ExternalCameraProvider::HotplugThread::threadLoop() {
 
         char v4l2DevicePath[kMaxDevicePathLen];
         snprintf(v4l2DevicePath, kMaxDevicePathLen, "%s%s", kDevicePath, event->name);
-
         if (event->mask & IN_CREATE) {
-            mParent->deviceAdded(v4l2DevicePath);
+            if(mParent->isExternalDevice(v4l2DevicePath))
+                mParent->deviceAdded(v4l2DevicePath);
         } else if (event->mask & IN_DELETE) {
-            mParent->deviceRemoved(v4l2DevicePath);
+            if(mParent->isExternalDevice(v4l2DevicePath))
+                mParent->deviceRemoved(v4l2DevicePath);
         }
     }
     return true;
