@@ -27,6 +27,10 @@
 #include <log/log.h>
 #include <sys/inotify.h>
 #include <regex>
+#include <android-base/file.h>
+#include <android-base/strings.h>
+#include <android-base/stringprintf.h>
+
 
 namespace android {
 namespace hardware {
@@ -34,6 +38,7 @@ namespace camera {
 namespace provider {
 namespace implementation {
 
+using base::ReadFileToString;
 using ::aidl::android::hardware::camera::common::Status;
 using ::android::hardware::camera::device::implementation::ExternalCameraDevice;
 using ::android::hardware::camera::device::implementation::fromStatus;
@@ -201,7 +206,7 @@ void ExternalCameraProvider::deviceAdded(const char* devName) {
             return;
         }
 
-        if (!(capability.device_caps & V4L2_CAP_VIDEO_CAPTURE)) {
+        if (!(capability.device_caps & (V4L2_CAP_VIDEO_CAPTURE | V4L2_CAP_VIDEO_CAPTURE_MPLANE))) {
             ALOGW("%s device %s does not support VIDEO_CAPTURE", __FUNCTION__, devName);
             return;
         }
@@ -256,8 +261,10 @@ void ExternalCameraProvider::updateAttachedCameras() {
             if (mCfg.mInternalDevices.count(deviceId) == 0) {
                 ALOGV("Non-internal v4l device %s found", de->d_name);
                 char v4l2DevicePath[kMaxDevicePathLen];
+                char mCamDevice[kMaxDevicePathLen];
                 snprintf(v4l2DevicePath, kMaxDevicePathLen, "%s%s", kDevicePath, de->d_name);
-                if(isExternalDevice(v4l2DevicePath))
+                sprintf(mCamDevice, "/sys/class/video4linux/%s/name", de->d_name);
+                if(isExternalDevice(v4l2DevicePath, mCamDevice))
                     deviceAdded(v4l2DevicePath);
             }
         }
@@ -265,7 +272,7 @@ void ExternalCameraProvider::updateAttachedCameras() {
     closedir(devdir);
 }
 
-bool ExternalCameraProvider::isExternalDevice(const char* devName) {
+bool ExternalCameraProvider::isExternalDevice(const char* devName, const char* sysClassName) {
     int32_t ret = -1;
     struct v4l2_capability vidCap;
 
@@ -291,7 +298,21 @@ bool ExternalCameraProvider::isExternalDevice(const char* devName) {
             return true;
         }
         ALOGE("Although %s driver name has uvc, but it's a uvc meta device", devName);
+    } else if(strstr((const char*)vidCap.driver, "cap")) {
+        //HDMI RX for mek_8qm
+        std::string buffer;
+        std::string propName = "mxc_isi.2.capture"; // TODO: Here is hardcoded for hdmi rx
+        if (!ReadFileToString(std::string(sysClassName), &buffer)) {
+            ALOGE("can't read video device name");
+            return false;
+        }
+
+        // string read from ReadFileToString have '\n' in last byte
+        if (propName.compare(0,propName.length(),buffer,0,propName.length()) == 0) {
+            return true;
+        }
     }
+
     return false;
 }
 
@@ -393,11 +414,13 @@ bool ExternalCameraProvider::HotplugThread::threadLoop() {
         }
 
         char v4l2DevicePath[kMaxDevicePathLen];
+        char mCamDevice[kMaxDevicePathLen];
         snprintf(v4l2DevicePath, kMaxDevicePathLen, "%s%s", kDevicePath, event->name);
+        sprintf(mCamDevice, "/sys/class/video4linux/%s/name", event->name);
         if (event->mask & IN_CREATE) {
             // usb camera is not ready until 100ms.
             usleep(100000);
-            if(mParent->isExternalDevice(v4l2DevicePath))
+            if(mParent->isExternalDevice(v4l2DevicePath, mCamDevice))
                 mParent->deviceAdded(v4l2DevicePath);
         } else if (event->mask & IN_DELETE) {
                 mParent->deviceRemoved(v4l2DevicePath);
