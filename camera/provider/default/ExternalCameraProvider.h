@@ -71,7 +71,7 @@ class ExternalCameraProvider : public BnCameraProvider {
     void addExternalCamera(const char* devName);
     void deviceAdded(const char* devName);
     void deviceRemoved(const char* devName);
-    bool isExternalDevice(const char* devName, const char* sysClassName);
+    bool isExternalDevice(const char* devName, const char* sysClassName, bool *isHdmiRx);
     void updateAttachedCameras();
 
     // A separate thread to monitor '/dev' directory for '/dev/video*' entries
