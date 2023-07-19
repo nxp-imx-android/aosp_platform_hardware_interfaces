@@ -301,7 +301,7 @@ bool ExternalCameraProvider::isExternalDevice(const char* devName, const char* s
     } else if(strstr((const char*)vidCap.driver, "cap")) {
         //HDMI RX for mek_8qm
         std::string buffer;
-        std::string propName = "mxc_isi.2.capture"; // TODO: Here is hardcoded for hdmi rx
+        std::string propName = "mxc_isi.6.capture"; // TODO: Here is hardcoded for hdmi rx
         if (!ReadFileToString(std::string(sysClassName), &buffer)) {
             ALOGE("can't read video device name");
             return false;
