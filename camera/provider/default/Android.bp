@@ -23,9 +23,30 @@ package {
     default_applicable_licenses: ["hardware_interfaces_license"],
 }
 
+imx_external_camera_aidl_defaults {
+    name: "imx_external_camera_aidl_defaults",
+}
+
+bootstrap_go_package {
+    name: "soong-imx_external_camera_aidl",
+    pkgPath: "android/soong/hardware/interfaces/camera/provider/default",
+    deps: [
+        "blueprint",
+        "blueprint-pathtools",
+        "soong",
+        "soong-android",
+        "soong-cc",
+        "soong-genrule",
+    ],
+    srcs: [
+        "imx_external_camera_aidl.go",
+    ],
+    pluginFor: ["soong_build"],
+}
+
 cc_library_shared {
     name: "android.hardware.camera.provider-V1-external-impl",
-    defaults: ["hidl_defaults"],
+    defaults: ["hidl_defaults", "imx_external_camera_aidl_defaults"],
     proprietary: true,
     srcs: [
         "ExternalCameraProvider.cpp",
@@ -59,7 +80,7 @@ cc_library_shared {
 
 cc_defaults {
     name: "camera_external_service_defaults",
-    defaults: ["hidl_defaults"],
+    defaults: ["hidl_defaults", "imx_external_camera_aidl_defaults"],
     proprietary: true,
     relative_install_path: "hw",
     srcs: ["external-service.cpp"],
@@ -92,14 +113,14 @@ cc_defaults {
 
 cc_binary {
     name: "android.hardware.camera.provider-V1-external-service",
-    defaults: ["camera_external_service_defaults"],
+    defaults: ["camera_external_service_defaults", "imx_external_camera_aidl_defaults"],
     init_rc: ["android.hardware.camera.provider-V1-external-service.rc"],
 }
 
 cc_binary {
     name: "android.hardware.camera.provider-V1-external-service-lazy",
     overrides: ["android.hardware.camera.provider-V1-external-service"],
-    defaults: ["camera_external_service_defaults"],
+    defaults: ["camera_external_service_defaults", "imx_external_camera_aidl_defaults"],
     init_rc: ["android.hardware.camera.provider-V1-external-service-lazy.rc"],
     cflags: ["-DLAZY_SERVICE"],
 }
