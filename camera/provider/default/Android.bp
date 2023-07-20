@@ -116,11 +116,3 @@ cc_binary {
     defaults: ["camera_external_service_defaults", "imx_external_camera_aidl_defaults"],
     init_rc: ["android.hardware.camera.provider-V1-external-service.rc"],
 }
-
-cc_binary {
-    name: "android.hardware.camera.provider-V1-external-service-lazy",
-    overrides: ["android.hardware.camera.provider-V1-external-service"],
-    defaults: ["camera_external_service_defaults", "imx_external_camera_aidl_defaults"],
-    init_rc: ["android.hardware.camera.provider-V1-external-service-lazy.rc"],
-    cflags: ["-DLAZY_SERVICE"],
-}
