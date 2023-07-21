@@ -47,5 +47,9 @@ func imx_CameraDefaults(ctx android.LoadHookContext) {
         p.Target.Android.Shared_libs = append(p.Target.Android.Shared_libs, "camera.device-external-impl")
     }
 
+    if ctx.Config().VendorConfig("IMXPLUGIN").String("TARGET_GRALLOC_VERSION") == "v4" {
+        p.Target.Android.Cppflags = append(p.Target.Android.Cppflags, "-DGRALLOC_VERSION=4")
+    }
+
     ctx.AppendProperties(p)
 }
