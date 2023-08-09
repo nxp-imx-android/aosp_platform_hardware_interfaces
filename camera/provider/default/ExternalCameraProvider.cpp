@@ -280,6 +280,18 @@ bool ExternalCameraProvider::isExternalDevice(const char* devName, const char* s
         *isHdmiRx = false;
     }
 
+    std::string video_name;
+    std::string video_decoder_name = "amphion-vpu-decoder";
+    std::string video_encoder_name = "amphion-vpu-encoder";
+    if (!ReadFileToString(std::string(sysClassName), &video_name)) {
+        ALOGE("can't read video device name");
+        return false;
+    }
+    if ((video_decoder_name.compare(0, video_decoder_name.length(), video_name, 0, video_decoder_name.length()) == 0) ||
+        (video_encoder_name.compare(0, video_encoder_name.length(), video_name, 0, video_encoder_name.length()) == 0)) {
+        return false;
+    }
+
     base::unique_fd fd(::open(devName, O_RDWR | O_NONBLOCK));
     if (fd.get() < 0) {
         ALOGE("%s open dev path:%s failed:%s", __func__, devName,strerror(errno));
