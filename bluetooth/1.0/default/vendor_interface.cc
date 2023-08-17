@@ -68,7 +68,7 @@ bool recent_activity_flag;
 
 VendorInterface* g_vendor_interface = nullptr;
 static VendorInterface vendor_interface;
-std::mutex wakeup_mutex_;
+
 HC_BT_HDR* WrapPacketAndCopy(uint16_t event, const hidl_vec<uint8_t>& data) {
   size_t packet_size = data.size() + sizeof(HC_BT_HDR);
   HC_BT_HDR* packet = reinterpret_cast<HC_BT_HDR*>(new uint8_t[packet_size]);
@@ -358,7 +358,12 @@ void VendorInterface::Close() {
 
 size_t VendorInterface::Send(uint8_t type, const uint8_t* data, size_t length) {
   {
-    std::unique_lock<std::mutex> lock(wakeup_mutex_);
+    std::unique_lock<std::mutex> guard(vendor_mutex_);
+
+    if (vstate != VENDOR_STATE_OPENED) {
+      ALOGW("VendorInterface is not open yet(%d)!", vstate);
+      return 0;
+    }
     ALOGI("%s: VendorInterface::Send", __func__);
 
     if (lib_interface_ == nullptr) {
