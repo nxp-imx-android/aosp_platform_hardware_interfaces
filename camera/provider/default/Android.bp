@@ -53,6 +53,9 @@ cc_library_shared {
         "ExternalCameraProvider.cpp",
     ],
     include_dirs: [
+        "vendor/nxp-opensource/imx/include",
+        "vendor/nxp-opensource/imx/image_process",
+        "vendor/nxp-opensource/imx/opencl-2d",
         "vendor/nxp-opensource/imx/display/display",
         "frameworks/native/headers/media_plugin",
     ],
