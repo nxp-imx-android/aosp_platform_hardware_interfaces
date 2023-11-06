@@ -87,7 +87,7 @@ ndk::ScopedAStatus ExternalCameraProvider::setCallback(
     }
 
     if (mCallback == nullptr) {
-        return fromStatus(Status::OK);
+        return fromStatus(Status::ILLEGAL_ARGUMENT);
     }
 
     for (const auto& pair : mCameraStatusMap) {
